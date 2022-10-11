@@ -2,6 +2,9 @@
 #define PLAY_USING_GAMEOBJECT_MANAGER
 #include "Play.h"
 #include <random>
+#include <chrono>
+#include <thread>
+#include <time.h>
 
 int displayWidth = 1280;
 int displayHeight = 720;
@@ -20,6 +23,7 @@ enum PlayerState
 	playerHeal,
 	playerAttack,
 	playerDead,
+	playerPowerUp,
 };
 
 enum BossState 
@@ -94,7 +98,6 @@ void UpdateGoombas();
 void UpdateDryBones();
 void UpdateBobBombs();
 void UpdateMagiKoopa();
-void UpdateEnemyProjectiles();
 
 //			STAGE RELATED:
 
@@ -106,10 +109,11 @@ void UpdateDestroyed();
 void UpdateUI();
 
 //-------------------------------------------------------------------------------------------------------------------------------
-//												CONTROL FUNCTIONS	
+//												HANDLE FUNCTIONS	
 
 void HandleNotDebuffedControls();
 void HandleDebuffedControls();
+void HandleHammerAnimations();
 
 //-------------------------------------------------------------------------------------------------------------------------------
 //												SPAWN FUNCTIONS	
@@ -126,7 +130,6 @@ void ScreenBouncing(GameObject&, int);
 void SetVelocity(GameObject&, std::string);
 Point2f GetRandomPositionInPS(int);
 void DecelerateObject(GameObject&, float);
-void SetSpriteDirection(GameObject&);
 
 //			UI RELATED:
 
@@ -138,7 +141,7 @@ void UpdateStageBackground(int);
 int PickBetween(int, int);
 float FindDistance(GameObject&, GameObject&);
 float GenRandomNumRange(float,float);
-
+bool timeHasPassed(int, int);
 
 //-------------------------------------------------------------------------------------------------------------------------------
 //												DEBUG FUNCTIONS	
@@ -167,7 +170,9 @@ bool MainGameUpdate( float elapsedTime )
 	/*Play::DrawFontText("SuperMario25636px_10x10", std::to_string(gameState.playerHP), { displayWidth / 2 , 15 }, Play::CENTRE);*/
 	UpdateEnemies();
 	UpdatePlayerState();
+	UpdateHammer();
 	UpdateDestroyed();
+	ShowDebugUI();
 	Play::PresentDrawingBuffer();
 	return Play::KeyDown( VK_ESCAPE );
 }
@@ -194,7 +199,7 @@ void UpdatePlayerState()
 	{
 	case PlayerState::playerAppear:
 	{
-
+		//Play walks from left when x is certain value stateappear
 	}
 	break;
 	case PlayerState::playerNotDebuffed:
@@ -249,12 +254,18 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerAttack:
 	{
-		//Play Hammer Animation 
+		HandleHammerAnimations();
 	}
 	break;
 	case PlayerState::playerDead:
 	{
 		//Play Death Animation
+	}
+	break;
+	case PlayerState::playerPowerUp:
+	{
+		//Be in this state for 7 seconds 
+		//Player is invincible
 	}
 	break;
 	}
@@ -263,14 +274,163 @@ void UpdatePlayerState()
 	Play::DrawObject(playerObj);
 }
 
+//Used to update player consumable items
+void UpdateConsumables() 
+{
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	std::vector<int> vHealthUps = Play::CollectGameObjectIDsByType(typeHealth1UP);
+	std::vector<int> vGoldenMushrooms = Play::CollectGameObjectIDsByType(typeGoldenMushroom);
+	std::vector<int> vRefreshingHerbs = Play::CollectGameObjectIDsByType(typeRefreshingHerb);
 
-void UpdateConsumables() {}
-void UpdateHammer(){}
+	for (int healthUpID : vHealthUps)
+	{
+		GameObject& healthUpObj = Play::GetGameObject(healthUpID);
+		bool hasCollidedHealth = false;
+
+		if (gameState.playerState != PlayerState::playerDead)
+		{
+			if (Play::IsColliding(healthUpObj, playerObj))
+			{
+				hasCollidedHealth = true;
+				gameState.playerState = PlayerState::playerHeal;
+			}
+
+			if (hasCollidedHealth)
+			{
+				healthUpObj.type = typeDestroyed;
+			}
+		}
+
+		ScreenBouncing(healthUpObj, gameState.stage);
+		Play::UpdateGameObject(healthUpObj);
+		Play::DrawObject(healthUpObj);
+	}
+
+	for (int goldenMushroomsID : vGoldenMushrooms)
+	{
+		GameObject& goldenMushroomObj = Play::GetGameObject(goldenMushroomsID);
+		bool hasCollidedGoldM = false;
+
+		if (gameState.playerState != PlayerState::playerDead)
+		{
+			if (Play::IsColliding(goldenMushroomObj, playerObj))
+			{
+				hasCollidedGoldM = true;
+				gameState.playerState = PlayerState::playerPowerUp;
+			}
+
+			if (hasCollidedGoldM)
+			{
+				goldenMushroomObj.type = typeDestroyed;
+			}
+		}
+		ScreenBouncing(goldenMushroomObj, gameState.stage);
+		Play::UpdateGameObject(goldenMushroomObj);
+		Play::DrawObject(goldenMushroomObj);
+	}
+
+	for (int refreshingHerbID : vRefreshingHerbs)
+	{
+		GameObject& refreshingHerbObj = Play::GetGameObject(refreshingHerbID);
+		bool hasCollidedRefreshingHerbs = false;
+
+		if (gameState.playerState == PlayerState::playerDebuffed)
+		{
+			if (Play::IsColliding(refreshingHerbObj, playerObj))
+			{
+				hasCollidedRefreshingHerbs = true;
+				Play::SetSprite(playerObj, "mario_normaltofat_22", 0.25f);
+
+				if (Play::IsAnimationComplete(playerObj)) 
+				{
+					gameState.playerState = PlayerState::playerNotDebuffed;
+				}
+			}
+
+			if (hasCollidedRefreshingHerbs)
+			{
+				refreshingHerbObj.type = typeDestroyed;
+			}
+		}
+		ScreenBouncing(refreshingHerbObj, gameState.stage);
+		Play::UpdateGameObject(refreshingHerbObj);
+		Play::DrawObject(refreshingHerbObj);
+	}
+
+}
+
+//Used to update Hammer game object
+void UpdateHammer()
+{
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
+
+	hammerObj.pos = playerObj.pos;
+
+	if (gameState.playerState == PlayerState::playerAttack)
+	{
+		Play::UpdateGameObject(hammerObj);
+		Play::DrawObject(hammerObj);
+	}
+	else
+	{
+		Play::UpdateGameObject(hammerObj);
+		Play::DrawObjectTransparent(hammerObj, 0);
+	}
+}
 
 //			ENEMY RELATED:
 
 //Used to update boss state
-void UpdateBossState() {}
+void UpdateBossState() 
+{
+	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
+	bool longRangedAtk = false;
+
+	switch (gameState.bossState) 
+	{
+	case BossState::bossAppear:
+	{
+		//boss will walk from left
+		//once they reach certain x amount move to idle
+	}
+	break;
+	case BossState::bossIdle:
+	{
+		//play Idle animation for 4 seconds
+		//if player is long ranged  set long range to true then move to boss agro
+		//if player is close ranged set long range to false then move to boss agro
+		//if enemy lists are empty then move to boss summon mob
+
+	}
+	break;
+	case BossState::bossAgro:
+	{
+
+	}
+	break;
+	case BossState::bossDamaged:
+	{
+		//-- from bossHp and play damage anim
+		//if bosshp -- is 0 then move to bossDead
+		//if damage anim is finished then move to state idle
+	}
+	break;
+	case BossState::bossSummonMob:
+	{
+		//play summon mob anim
+		//use spawnenemies function 
+		//if enemy list .size = 6 then move to idle
+	}
+	break;
+	case BossState::bossDead:
+	{
+		//play death animation
+		//delete boss object
+	}
+	break;
+	}
+}
 
 //Used to update enemies
 void UpdateEnemies() 
@@ -330,7 +490,7 @@ void UpdateGoombas()
 		}
 
 		Play::UpdateGameObject(goombaObj);
-		Play::DrawObject(goombaObj);
+		Play::DrawObjectRotated(goombaObj);
 	}
 }
 
@@ -340,6 +500,31 @@ void UpdateDryBones()
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
 	std::vector<int> vDryBones = Play::CollectGameObjectIDsByType(typeDryBones);
+
+	for (int dryBonesID: vDryBones) 
+	{
+		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+		
+		float playerToDryBonesAng = atan2f(playerObj.pos.y - dryBonesObj.pos.y, playerObj.pos.x - dryBonesObj.pos.x);
+		//if angle between player and object is equal to 90 degrees or 270 degrees
+		//spawn head and body 
+		//head will follow player for 3 seconds 
+		//if player hammers head or body destroy them
+
+		ScreenBouncing(dryBonesObj, gameState.stage);
+
+		if (dryBonesObj.velocity.y < 0)
+		{
+			Play::SetSprite(dryBonesObj, "drybones_n_16", 0.25f);
+		}
+		else if (dryBonesObj.velocity.y > 0)
+		{
+			Play::SetSprite(dryBonesObj, "drybones_s_16", 0.25f);
+		}
+
+		Play::UpdateGameObject(dryBonesObj);
+		Play::DrawObjectRotated(dryBonesObj);
+	}
 }
 
 //Used to update bobbomb enemies
@@ -349,69 +534,19 @@ void UpdateBobBombs()
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
 	std::vector<int> vBobBombs = Play::CollectGameObjectIDsByType(typeBobBomb);
 
-	for (int bobBombID: vBobBombs)
+	for (int bobBombID : vBobBombs) 
 	{
 		GameObject& bobBombObj = Play::GetGameObject(bobBombID);
 		bool isAlight = false;
+		float distanceFromPlayer = FindDistance(bobBombObj, playerObj);
 
-		if (gameState.playerState == PlayerState::playerNotDebuffed || gameState.playerState == PlayerState::playerDebuffed)
+		if (distanceFromPlayer < 100 && isAlight == false &&( gameState.playerState == PlayerState::playerNotDebuffed || gameState.playerState == PlayerState::playerDebuffed))
 		{
-			if (FindDistance(playerObj, bobBombObj) < 25 || isAlight == false) 
-			{
-				isAlight = true;
-				bobBombObj.velocity *= 1.5;
-				int wait = 0;
-
-				for (int i = 0; i < 120; i++) 
-				{
-					wait++;
-				}
-
-				if (wait == 119) 
-				{
-					bobBombObj.velocity = { 0,0 };
-					Play::SetSprite(bobBombObj, "bobbomb_walk_s_a_8", 0.25f);
-				}
-
-				wait = 0;
-
-				for (int i = 0; i < 60; i++)
-				{
-					wait++;
-				}
-
-				if (wait == 59)
-				{
-					Play::DrawObjectTransparent(bobBombObj, 0.0f);
-
-					int explosion1ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15 , "explosion_12");
-					int explosion2ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
-					int explosion3ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
-
-					GameObject& explosion1Obj = Play::GetGameObject(explosion1ID);
-					GameObject& explosion2Obj = Play::GetGameObject(explosion2ID);
-					GameObject& explosion3Obj = Play::GetGameObject(explosion3ID);
-
-					explosion1Obj.scale = GenRandomNumRange(0.7, 1.9);
-					explosion2Obj.scale = GenRandomNumRange(0.7, 1.9);
-					explosion3Obj.scale = GenRandomNumRange(0.7, 1.9);
-
-					explosion1Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
-					explosion2Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
-					explosion3Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
-				}
-			}
-
-			//Player collision
-			//when alight
-			//when not alight
-			//when in a attackState
-
+			isAlight = true;
+			bobBombObj.velocity *= 1.5;
 		}
 
-		ScreenBouncing(bobBombObj, gameState.stage);
-
-		if (isAlight) 
+		if (isAlight)
 		{
 			if (bobBombObj.velocity.x < 0)
 			{
@@ -421,8 +556,69 @@ void UpdateBobBombs()
 			{
 				Play::SetSprite(bobBombObj, "bobbomb_walk_e_a_8", 0.25f);
 			}
+
+			if (!Play::IsColliding(bobBombObj, playerObj))
+			{
+				//if desired time = elapsedtime + 4000 ms do below 
+				//wait 4 seconds
+
+				bobBombObj.velocity = { 0,0 };
+				Play::SetSprite(bobBombObj, "bobbomb_walk_s_a_8", 0.25f);
+
+				//if desired time = elapsedtime + 2000 ms do below 
+				//wait 2 seconds
+
+				Play::DrawObjectTransparent(bobBombObj, 0);
+
+				int explosion1ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
+				int explosion2ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
+				int explosion3ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
+
+				GameObject& explosion1Obj = Play::GetGameObject(explosion1ID);
+				GameObject& explosion2Obj = Play::GetGameObject(explosion2ID);
+				GameObject& explosion3Obj = Play::GetGameObject(explosion3ID);
+
+				explosion1Obj.animSpeed = explosion2Obj.animSpeed = explosion3Obj.animSpeed = 0.25f;
+
+				//Set scale to random number between 0.7 and 0.9
+				explosion1Obj.scale = GenRandomNumRange(0.7, 0.9);
+				explosion2Obj.scale = GenRandomNumRange(0.7, 0.9);
+				explosion3Obj.scale = GenRandomNumRange(0.7, 0.9);
+
+				//Set Random Rotation
+				//explosion1Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
+				//explosion2Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
+				//explosion3Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
+				Play::DestroyGameObject(bobBombID);
+			}
+			else
+			{
+				bobBombObj.velocity = { 0,0 };
+				Play::DrawObjectTransparent(bobBombObj, 0);
+
+				int explosion1ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
+				int explosion2ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
+				int explosion3ID = Play::CreateGameObject(typeBobBombExplosion, bobBombObj.pos, 15, "explosion_12");
+
+				GameObject& explosion1Obj = Play::GetGameObject(explosion1ID);
+				GameObject& explosion2Obj = Play::GetGameObject(explosion2ID);
+				GameObject& explosion3Obj = Play::GetGameObject(explosion3ID);
+
+				explosion1Obj.animSpeed = explosion2Obj.animSpeed = explosion3Obj.animSpeed = 0.25f;
+
+				//Set scale to random number between 0.7 and 0.9
+				explosion1Obj.scale = GenRandomNumRange(0.7, 0.9);
+				explosion2Obj.scale = GenRandomNumRange(0.7, 0.9);
+				explosion3Obj.scale = GenRandomNumRange(0.7, 0.9);
+
+				//Set Random Rotation
+				explosion1Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
+				explosion2Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
+				explosion3Obj.rotation = GenRandomNumRange(0.0, PLAY_PI);
+				Play::DestroyGameObject(bobBombID);
+			}
 		}
-		else 
+		else
 		{
 			if (bobBombObj.velocity.x < 0)
 			{
@@ -433,10 +629,35 @@ void UpdateBobBombs()
 				Play::SetSprite(bobBombObj, "bobbomb_walk_e_8", 0.25f);
 			}
 		}
+		ScreenBouncing(bobBombObj, gameState.stage);
 		Play::UpdateGameObject(bobBombObj);
-		Play::DrawObject(bobBombObj);
+		Play::DrawObjectRotated(bobBombObj);
+	}
+
+	std::vector<int> vExplosions = Play::CollectGameObjectIDsByType(typeBobBombExplosion);
+
+	for (int explosionID : vExplosions) 
+	{
+		GameObject& explosionObj = Play::GetGameObject(explosionID);
+
+		if (gameState.playerState == PlayerState::playerNotDebuffed || gameState.playerState == PlayerState::playerDebuffed) 
+		{
+			if (Play::IsColliding(explosionObj, playerObj)) 
+			{
+				gameState.playerState == PlayerState::playerDamaged;
+				explosionObj.type = typeDestroyed;
+			}
+		}
+
+		if (Play::IsAnimationComplete(explosionObj)) 
+		{
+			explosionObj.type = typeDestroyed;
+		}
+		Play::UpdateGameObject(explosionObj);
+		Play::DrawObjectRotated(explosionObj);
 	}
 }
+
 
 //Used to update magikoopa enemy
 void UpdateMagiKoopa() 
@@ -445,10 +666,37 @@ void UpdateMagiKoopa()
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
 	std::vector<int> vMagiKoopas = Play::CollectGameObjectIDsByType(typeMagiKoopa);
-}
 
-//Used to update enemy projectiles and effects
-void UpdateEnemyProjectiles() {}
+	for (int magiKoopaID : vMagiKoopas)
+	{
+		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+
+		float playerToMagiAng = atan2f(playerObj.pos.y - magiKoopaObj.pos.y, playerObj.pos.x - magiKoopaObj.pos.x);
+		//if angle between player and object is equal to 90 degrees or 270 degrees
+		//set temp value to old Velocity value
+		// if player is left then do left animation --> spawn projectile going left
+		// else right animation --> spawn projectile going right
+		//if projecile is not visible and hasnt collided with playe then destroy
+		//if player collides with projectile then set player state to debuffed and minus 1 from health
+		//if player hammers koopa delete koopa
+
+		ScreenBouncing(magiKoopaObj, gameState.stage);
+
+		if (magiKoopaObj.velocity.y < 0)
+		{
+			Play::SetSprite(magiKoopaObj, "magikoopa_n_8", 0.25f);
+		}
+		else if (magiKoopaObj.velocity.y > 0)
+		{
+			Play::SetSprite(magiKoopaObj, "magikoopa_s_8", 0.25f);
+		}
+
+		Play::UpdateGameObject(magiKoopaObj);
+		Play::DrawObjectRotated(magiKoopaObj);
+	}
+
+
+}
 
 //			STAGE RELATED:
 
@@ -456,7 +704,7 @@ void UpdateStageState() {}
 
 //          MISCELLANEOUS:
 
-//Used to update destroyed objects
+//Used to update destroyed objects ()
 void UpdateDestroyed() 
 {
 	std::vector<int> vDestroyed = Play::CollectGameObjectIDsByType(typeDestroyed);
@@ -492,25 +740,25 @@ void HandleNotDebuffedControls()
 
 	if (Play::KeyDown(VK_UP)) 
 	{
-		playerObj.velocity = { 0,-4 };
+		playerObj.velocity = { 0,-2.5f };
 		Play::SetSprite(playerObj, "mario_walk_n_12", 0.35f);
 		playerOrientation = vOrientations.at(0);
 	}
 	else if (Play::KeyDown(VK_RIGHT)) 
 	{
-		playerObj.velocity = { 4,0 };
+		playerObj.velocity = { 2.5f,0 };
 		Play::SetSprite(playerObj, "mario_walk_e_12", 0.35f);
 		playerOrientation = vOrientations.at(1);
 	}
 	else if (Play::KeyDown(VK_DOWN)) 
 	{
-		playerObj.velocity = { 0,4 };
+		playerObj.velocity = { 0,2.5f };
 		Play::SetSprite(playerObj, "mario_walk_s_12", 0.35f);
 		playerOrientation = vOrientations.at(2);
 	}
 	else if (Play::KeyDown(VK_LEFT)) 
 	{
-		playerObj.velocity = { -4,0 };
+		playerObj.velocity = { -2.5f,0 };
 		Play::SetSprite(playerObj, "mario_walk_w_12", 0.35f);
 		playerOrientation = vOrientations.at(3);
 	}
@@ -596,6 +844,54 @@ void HandleDebuffedControls()
 	}
 }
 
+//Handle Hammer Animations
+void HandleHammerAnimations() 
+{
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
+
+	if (playerOrientation == vOrientations.at(0))
+	{
+		Play::SetSprite(playerObj, "mario_hammer_n_3", 0.25f);
+		Play::SetSprite(hammerObj, "ham_mario_n_3", 0.25f);
+
+		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
+		{
+			gameState.playerState = PlayerState::playerNotDebuffed;
+		}
+	}
+	else if (playerOrientation == vOrientations.at(1))
+	{
+		Play::SetSprite(playerObj, "mario_hammer_e_3", 0.25f);
+		Play::SetSprite(hammerObj, "ham_mario_w_3", 0.25f);
+
+		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
+		{
+			gameState.playerState = PlayerState::playerNotDebuffed;
+		}
+	}
+	else if (playerOrientation == vOrientations.at(2))
+	{
+		Play::SetSprite(playerObj, "mario_hammer_s_3", 0.25f);
+		Play::SetSprite(hammerObj, "ham_mario_s_3", 0.25f);
+
+		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
+		{
+			gameState.playerState = PlayerState::playerNotDebuffed;
+		}
+	}
+	else if (playerOrientation == vOrientations.at(3))
+	{
+		Play::SetSprite(playerObj, "mario_hammer_w_3", 0.25f);
+		Play::SetSprite(hammerObj, "ham_mario_e_3", 0.25f);
+
+		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
+		{
+			gameState.playerState = PlayerState::playerNotDebuffed;
+		}
+	}
+}
+
 //-------------------------------------------------------------------------------------------------------------------------------
 //												SPAWN FUNCTIONS	
 
@@ -607,12 +903,12 @@ void SpawnEnemies(int stage)
 		//spawn 3 goombas
 		for (int i = 0; i < 3; i++) 
 		{
-			int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(stage), 15, "goomba_win_s_24");
+			int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(stage), 10, "goomba_win_s_24");
 			GameObject& goombaObj = Play::GetGameObject(goombaID);
 			SetVelocity(goombaObj, "x");
 		}
 
-		int bobbombID = Play::CreateGameObject(typeBobBomb, GetRandomPositionInPS(stage), 15, "bobbomb_walk_s_8");
+		int bobbombID = Play::CreateGameObject(typeBobBomb, GetRandomPositionInPS(stage), 10, "bobbomb_walk_s_8");
 		GameObject& bobBombObj = Play::GetGameObject(bobbombID);
 		SetVelocity(bobBombObj, "x");
 
@@ -764,30 +1060,6 @@ void DecelerateObject(GameObject& gameObj, float rate)
 	gameObj.acceleration = {0,0};
 }
 
-//Used to set sprite direction
-void SetSpriteDirection(GameObject& gameObj) 
-{
-	if (gameObj.type == typeGoomba) 
-	{
-		if (gameObj.velocity.x < 0)
-		{
-			Play::SetSprite(gameObj, "goomba_walk_l_8", 0.25f);
-		}
-		else if (gameObj.velocity.x > 0)
-		{
-			Play::SetSprite(gameObj, "goomba_walk_r_8", 0.25f);
-		}
-	}
-	else if (gameObj.type == typeBobBomb)
-	{
-
-	}
-	else if (gameObj.type == typeMagiKoopa)
-	{
-
-	}
-}
-
 //			UI RELATED:
 
 //Used to draw UI
@@ -831,7 +1103,7 @@ float FindDistance(GameObject& gameObj1, GameObject& gameObj2)
 	float y1 = gameObj1.pos.y;
 	float y2 = gameObj2.pos.y;
 
-	float distance = sqrt(pow((x2 -x1),2) + pow((y2 - y1), 2));
+	float distance = sqrt(pow((x2 - x1), 2) + pow((y2 - y1), 2));
 	return distance;
 }
 
@@ -844,7 +1116,111 @@ float GenRandomNumRange(float lowerNum, float upperNum)
 }
 
 
+//Used to return if a specific amount of time has passed
+bool timeHasPassed(int elapsedTime, int timePassed) 
+{
+	//add timepasssed to elapsedTime --> desiredtime
+	//if elapsedTime  == desiredTime return true else return false
+	// else false;
+}
+
+
 //-------------------------------------------------------------------------------------------------------------------------------
 //												DEBUG FUNCTIONS	
 
-void ShowDebugUI() {}
+void ShowDebugUI() 
+{
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
+	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
+
+	std::vector<int> vGoombas = Play::CollectGameObjectIDsByType(typeGoomba);
+	std::vector<int> vBobBombs = Play::CollectGameObjectIDsByType(typeBobBomb);
+	std::vector<int> vDryBones = Play::CollectGameObjectIDsByType(typeDryBones);
+	std::vector<int> vMagiKoopa = Play::CollectGameObjectIDsByType(typeMagiKoopa);
+	std::vector<int> vExplosions = Play::CollectGameObjectIDsByType(typeBobBombExplosion);
+	
+	//		Position Checks
+	Play::DrawDebugText(playerObj.pos, "Player Here", Play::cGreen);
+	Play::DrawDebugText(hammerObj.pos, "Hammer Here", Play::cGreen);
+	Play::DrawDebugText(bowserObj.pos, "Bowser Here", Play::cGreen);
+
+	for (int goombaID : vGoombas) 
+	{
+		GameObject& goombaObj = Play::GetGameObject(goombaID);
+		Play::DrawDebugText(goombaObj.pos, "Goomba Here", Play::cGreen);
+	}
+
+	for (int bobBombID : vBobBombs)
+	{
+		GameObject& bobBombObj = Play::GetGameObject(bobBombID);
+		float distance = FindDistance(bobBombObj, playerObj);
+		std::string distanceAsString = std::to_string(distance);
+		Play::DrawDebugText(bobBombObj.pos, "BB Here", Play::cGreen);
+		Play::DrawDebugText({ bobBombObj.pos.x , bobBombObj.pos.y + 5}, distanceAsString.c_str(), Play::cGreen);
+	}
+
+	for (int dryBonesID : vDryBones)
+	{
+		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+		Play::DrawDebugText(dryBonesObj.pos, "DD Here", Play::cGreen);
+	}
+
+	for (int magiKoopaID : vMagiKoopa)
+	{
+		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+		Play::DrawDebugText(magiKoopaObj.pos, "MK Here", Play::cGreen);
+	}
+
+	//		Collision Checks
+
+	for (int goombaID : vGoombas)
+	{
+		GameObject& goombaObj = Play::GetGameObject(goombaID);
+
+		if (Play::IsColliding(goombaObj, playerObj)) 
+		{
+			Play::DrawDebugText(goombaObj.pos, "Goomba Colliding", Play::cGreen);
+		}
+	}
+
+	for (int bobBombID : vBobBombs)
+	{
+		GameObject& bobBombObj = Play::GetGameObject(bobBombID);
+
+		if (Play::IsColliding(bobBombObj, playerObj))
+		{
+			Play::DrawDebugText(bobBombObj.pos, "Bomba Colliding", Play::cGreen);
+		}
+	}
+
+	for (int explosionID : vExplosions)
+	{
+		GameObject& explosionObj = Play::GetGameObject(explosionID);
+
+		if (Play::IsColliding(explosionObj, playerObj))
+		{
+			Play::DrawDebugText(explosionObj.pos, "Explosion Colliding", Play::cGreen);
+		}
+	}
+
+	for (int dryBonesID : vDryBones)
+	{
+		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+
+		if (Play::IsColliding(dryBonesObj, playerObj))
+		{
+			Play::DrawDebugText(dryBonesObj.pos, "DD Colliding", Play::cGreen);
+		}
+	}
+
+	for (int magiKoopaID : vMagiKoopa)
+	{
+		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+
+		if (Play::IsColliding(magiKoopaObj, playerObj))
+		{
+			Play::DrawDebugText(magiKoopaObj.pos, "MK Colliding", Play::cGreen);
+		}
+	}
+}
