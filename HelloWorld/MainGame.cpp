@@ -2,21 +2,16 @@
 #define PLAY_USING_GAMEOBJECT_MANAGER
 #include "Play.h"
 #include <random>
-#include <chrono>
-#include <thread>
-#include <time.h>
 
 int displayWidth = 1280;
 int displayHeight = 720;
 int displayScale = 1;
 int seconds = 0;
-int secondsDebug = 0;
 
 const std::vector<std::string> vOrientations = { "N", "E", "S", "W" };
 std::string playerOrientation{};
 bool playerisDebuffed = false;
 bool debugging = false;
-//bool wasGoingDown;
 
 
 enum PlayerState 
@@ -40,14 +35,6 @@ enum BossState
 	bossDamaged,
 	bossSummonMob,
 	bossDead,
-};
-
-enum StageState
-{
-	stageStart = 0,
-	normalStage,
-	stageWin,
-	bossStage,
 };
 
 enum GameObjectType
@@ -85,7 +72,6 @@ struct GameState
 	int framesPassed = 0;
 	PlayerState playerState = PlayerState::playerNotDebuffed;
 	BossState bossState = BossState::bossAppear;
-	StageState stageState = StageState::normalStage;
 };
 
 GameState gameState;
@@ -127,7 +113,7 @@ void HandleHammerAnimations();
 //-------------------------------------------------------------------------------------------------------------------------------
 //												SPAWN FUNCTIONS	
 
-void SpawnEnemies(int);
+void SpawnEnemies();
 void SpawnPlayerConsumables();
 
 //-------------------------------------------------------------------------------------------------------------------------------
@@ -135,15 +121,14 @@ void SpawnPlayerConsumables();
 
 //          OBJECT RELATED:
 
-void ScreenBouncing(GameObject&, int);
+void ScreenBouncing(GameObject&, bool);
 void SetVelocity(GameObject&, std::string);
-Point2f GetRandomPositionInPS(int);
+Point2f GetRandomPositionInPS();
 void DecelerateObject(GameObject&, float);
 
 //			UI RELATED:
 
 void DrawUI();
-void UpdateStageBackground(int);
 
 //          MISCELLANEOUS:
 
@@ -164,11 +149,11 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 {
 	Play::CreateManager( displayWidth, displayHeight, displayScale );
 	Play::CentreAllSpriteOrigins();
-	UpdateStageBackground(gameState.stage);
+	Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
 	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
 	Play::CreateGameObject(typePlayer, { displayWidth / 2, 505 }, 15, "mario_idle_s_35");
 	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 20, "ham_mario_s_3");
-	SpawnEnemies(gameState.playerState);
+	SpawnEnemies();
 }
 
 // Called by PlayBuffer every frame (60 times a second!)
@@ -176,11 +161,10 @@ bool MainGameUpdate( float elapsedTime )
 {
 	gameState.framesPassed ++;
 	Play::DrawBackground();
-	Play::DrawFontText("SuperMario25636px_10x10", "STAGE " + std::to_string(gameState.stage), { 80 , 25 }, Play::CENTRE);
-	Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), {displayWidth - 80 , 25 }, Play::CENTRE);
-	Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth / 2 , 25 }, Play::CENTRE);
-	/*Play::DrawFontText("SuperMario25636px_10x10", std::to_string(gameState.playerHP), { displayWidth / 2 , 45 }, Play::CENTRE);*/
+	Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), {displayWidth /2 , 25 }, Play::CENTRE);
+	Play::DrawFontText("SuperMario25636px_10x10", "HEALTH " + std::to_string(gameState.playerHP), { displayWidth /2 , displayHeight - 25 }, Play::CENTRE);
 	UpdateTime();
+	UpdateDestroyed();
 	UpdateGoombas();
 	UpdateBobBombs();
 	UpdateMagiKoopa();
@@ -188,7 +172,6 @@ bool MainGameUpdate( float elapsedTime )
 	UpdatePlayerState();
 	UpdateHammer();
 	UpdateSpikes();
-	UpdateDestroyed();
 
 	if (debugging) 
 	{ 
@@ -221,7 +204,7 @@ void UpdatePlayerState()
 	{
 	case PlayerState::playerAppear:
 	{
-		//Play walks from left when x is certain value stateappear
+		//Play walks from left when x is certain value statenotdebuffed
 	}
 	break;
 	case PlayerState::playerNotDebuffed:
@@ -299,17 +282,90 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerDead:
 	{
-		//Play Death Animation
+		playerObj.velocity = { 0,0 };
+		Play::SetSprite(playerObj, "mario_shock_6", 0.25f);
+
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO CONTINUE", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
+
+		if (Play::KeyPressed(VK_RETURN) == true) 
+		{
+			gameState.bossHp = 4;
+			gameState.playerHP = 3;
+			gameState.score = 0;
+			gameState.stage = 1;
+			gameState.framesPassed = 0;
+			
+			//start audio loop
+
+			//Delete all enemies and move boss to off screen
+
+			for (int goombaID : Play::CollectGameObjectIDsByType(typeGoomba)) 
+			{
+				Play::GetGameObject(goombaID).type = typeDestroyed;
+			}
+
+			for (int bombaAID : Play::CollectGameObjectIDsByType(typeBobBombAlight))
+			{
+				Play::GetGameObject(bombaAID).type = typeDestroyed;
+			}
+
+			for (int bombaNAID : Play::CollectGameObjectIDsByType(typeBobBombNotAlight))
+			{
+				Play::GetGameObject(bombaNAID).type = typeDestroyed;
+			}
+
+			for (int bombaEx : Play::CollectGameObjectIDsByType(typeBobBombExplosion))
+			{
+				Play::GetGameObject(bombaEx).type = typeDestroyed;
+			}
+
+			for (int dryBonesID : Play::CollectGameObjectIDsByType(typeDryBones))
+			{
+				Play::GetGameObject(dryBonesID).type = typeDestroyed;
+			}
+
+			for (int dryBonesHeadID : Play::CollectGameObjectIDsByType(typeDryBoneHead))
+			{
+				Play::GetGameObject(dryBonesHeadID).type = typeDestroyed;
+			}
+
+			for (int dryBonesBodyID : Play::CollectGameObjectIDsByType(typeDryBoneBody))
+			{
+				Play::GetGameObject(dryBonesBodyID).type = typeDestroyed;
+			}
+
+			for (int magiKoopaID : Play::CollectGameObjectIDsByType(typeMagiKoopa))
+			{
+				Play::GetGameObject(magiKoopaID).type = typeDestroyed;
+			}
+
+			for (int magiKoopaProjID : Play::CollectGameObjectIDsByType(typeMagiKoopaProj))
+			{
+				Play::GetGameObject(magiKoopaProjID).type = typeDestroyed;
+			}
+
+			//make sure to delete bowser effects/attacks
+
+			gameState.playerState = PlayerState::playerAppear;
+			gameState.bossState = BossState::bossAppear;
+		}
 	}
 	break;
 	case PlayerState::playerPowerUp:
 	{
-		//Be in this state for 7 seconds 
-		//Player is invincible
+		//player will be in this state for 5 seconds and will be invincible
 	}
 	break;
 	}
-	ScreenBouncing(playerObj, gameState.stage);
+
+	if (gameState.playerState != PlayerState::playerAppear) 
+	{
+		ScreenBouncing(playerObj, true);
+	}
+	else 
+	{
+		ScreenBouncing(playerObj, false);
+	}
 	Play::UpdateGameObject(playerObj);
 	Play::DrawObject(playerObj);
 }
@@ -341,7 +397,7 @@ void UpdateConsumables()
 			}
 		}
 
-		ScreenBouncing(healthUpObj, gameState.stage);
+		ScreenBouncing(healthUpObj, true);
 		Play::UpdateGameObject(healthUpObj);
 		Play::DrawObject(healthUpObj);
 	}
@@ -364,7 +420,7 @@ void UpdateConsumables()
 				goldenMushroomObj.type = typeDestroyed;
 			}
 		}
-		ScreenBouncing(goldenMushroomObj, gameState.stage);
+		ScreenBouncing(goldenMushroomObj, true);
 		Play::UpdateGameObject(goldenMushroomObj);
 		Play::DrawObject(goldenMushroomObj);
 	}
@@ -379,12 +435,8 @@ void UpdateConsumables()
 			if (Play::IsColliding(refreshingHerbObj, playerObj))
 			{
 				hasCollidedRefreshingHerbs = true;
-				Play::SetSprite(playerObj, "mario_normaltofat_22", 0.25f);
-
-				if (Play::IsAnimationComplete(playerObj)) 
-				{
-					gameState.playerState = PlayerState::playerNotDebuffed;
-				}
+				playerisDebuffed = false;
+				gameState.playerState = PlayerState::playerTransform;
 			}
 
 			if (hasCollidedRefreshingHerbs)
@@ -392,11 +444,10 @@ void UpdateConsumables()
 				refreshingHerbObj.type = typeDestroyed;
 			}
 		}
-		ScreenBouncing(refreshingHerbObj, gameState.stage);
+		ScreenBouncing(refreshingHerbObj, true);
 		Play::UpdateGameObject(refreshingHerbObj);
 		Play::DrawObject(refreshingHerbObj);
 	}
-
 }
 
 //Used to update Hammer game object
@@ -470,6 +521,9 @@ void UpdateBossState()
 	}
 	break;
 	}
+	//c+v screenbouncing function from player update 
+	//update object
+	//drawobject --> maybe rotated have to see how things are implemented
 }
 
 //Used to update Goomba enemies
@@ -517,7 +571,7 @@ void UpdateGoombas()
 		{
 			Play::SetSprite(goombaObj, "goomba_walk_e_8", 0.25f);
 		}
-		ScreenBouncing(goombaObj, gameState.stage);
+		ScreenBouncing(goombaObj, true);
 		Play::UpdateGameObject(goombaObj);
 		Play::DrawObjectRotated(goombaObj);
 	}
@@ -585,7 +639,7 @@ void UpdateDryBones()
 			dryBonesObj.type = typeDestroyed;
 		}
 
-		ScreenBouncing(dryBonesObj, gameState.stage);
+		ScreenBouncing(dryBonesObj, true);
 		Play::UpdateGameObject(dryBonesObj);
 		Play::DrawObjectRotated(dryBonesObj);
 	}
@@ -626,9 +680,22 @@ void UpdateDryBones()
 			gameState.score + 3;
 		}
 
-		if (userHasCollided || hammerHasCollided) 
+		if (userHasCollided) 
 		{
 			dryBoneHeadObj.type = typeDestroyed;
+			gameState.playerState = PlayerState::playerDamaged;
+
+			for (int dryBoneBodyID : vdryBonesBodies)
+			{
+				GameObject& dryBoneBodyObj = Play::GetGameObject(dryBoneBodyID);
+				dryBoneBodyObj.type = typeDestroyed;
+			}
+		}
+
+		if (hammerHasCollided)
+		{
+			dryBoneHeadObj.type = typeDestroyed;
+			gameState.score += 3;
 
 			for (int dryBoneBodyID : vdryBonesBodies)
 			{
@@ -677,7 +744,7 @@ void UpdateBobBombs()
 			Play::SetSprite(bobBombObj, "bobbomb_walk_w_8", 0.25f);
 		}
 
-		ScreenBouncing(bobBombObj, gameState.stage);
+		ScreenBouncing(bobBombObj, true);
 		Play::UpdateGameObject(bobBombObj);
 		Play::DrawObjectRotated(bobBombObj);
 	}
@@ -687,6 +754,7 @@ void UpdateBobBombs()
 	for (int bobBombID : vBobBombAlights)
 	{
 		GameObject& bobBombObj = Play::GetGameObject(bobBombID);
+		bool isHammerColliding = false;
 
 		if (Play::IsColliding(bobBombObj, playerObj)) 
 		{
@@ -716,12 +784,12 @@ void UpdateBobBombs()
 		}
 		else 
 		{
-			if (seconds % 4 == 0)
+			if (seconds % 3 == 0)
 			{
 				bobBombObj.velocity = { 0,0 };
 				Play::SetSprite(bobBombObj, "bobbomb_walk_s_a_8", 0.25f);
 
-				if (seconds % 3 == 0) 
+				if (seconds % 4 == 0) 
 				{
 					Play::DrawObjectTransparent(bobBombObj, 0);
 
@@ -749,6 +817,17 @@ void UpdateBobBombs()
 			}
 		}
 
+		if (gameState.playerState == PlayerState::playerAttack && Play::IsColliding(bobBombObj, hammerObj))
+		{
+			isHammerColliding = true;
+		}
+
+		if (isHammerColliding)
+		{
+			gameState.score += 2;
+			bobBombObj.type = typeDestroyed;
+		}
+
 		if (bobBombObj.velocity.x > 0)
 		{
 			Play::SetSprite(bobBombObj, "bobbomb_walk_e_a_8", 0.25f);
@@ -758,7 +837,7 @@ void UpdateBobBombs()
 			Play::SetSprite(bobBombObj, "bobbomb_walk_w_a_8", 0.25f);
 		}
 
-		ScreenBouncing(bobBombObj, gameState.stage);
+		ScreenBouncing(bobBombObj, true);
 		Play::UpdateGameObject(bobBombObj);
 		Play::DrawObject(bobBombObj);
 	}
@@ -787,7 +866,6 @@ void UpdateBobBombs()
 	}
 }
 
-
 //Used to update magikoopa enemy
 void UpdateMagiKoopa() 
 {
@@ -801,6 +879,7 @@ void UpdateMagiKoopa()
 		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
 		float playerToMagiAng = atan2f(magiKoopaObj.pos.y - playerObj.pos.y, magiKoopaObj.pos.x - playerObj.pos.x);
 		bool wasGoingDown = false;
+		bool isHammerColliding = false;
 
 		if (magiKoopaObj.velocity.y < 0)
 		{
@@ -862,7 +941,20 @@ void UpdateMagiKoopa()
 				}
 			}
 		}
-		ScreenBouncing(magiKoopaObj, gameState.stage);
+		//Hammer Collision
+
+		if (gameState.playerState == PlayerState::playerAttack && Play::IsColliding(magiKoopaObj, hammerObj)) 
+		{
+			isHammerColliding = true;
+		}
+
+		if (isHammerColliding) 
+		{
+			gameState.score += 3;
+			magiKoopaObj.type = typeDestroyed;
+		}
+
+		ScreenBouncing(magiKoopaObj, true);
 		Play::UpdateGameObject(magiKoopaObj);
 		Play::DrawObjectRotated(magiKoopaObj);
 	}
@@ -897,9 +989,6 @@ void UpdateMagiKoopa()
 }
 
 //			STAGE RELATED:
-
-//Used to update stage state
-void UpdateStageState() {}
 
 //Used to draws spikes
 void UpdateSpikes() 
@@ -979,6 +1068,11 @@ void HandleNotDebuffedControls()
 		playerObj.velocity = { -2.5f,0 };
 		Play::SetSprite(playerObj, "mario_walk_w_12", 0.25f);
 		playerOrientation = vOrientations.at(3);
+	}
+	else if (Play::KeyDown(VK_SPACE))
+	{
+		playerObj.velocity = { 0,0 };
+		gameState.playerState = PlayerState::playerAttack;
 	}
 	else 
 	{
@@ -1070,8 +1164,8 @@ void HandleHammerAnimations()
 
 	if (playerOrientation == vOrientations.at(0))
 	{
-		Play::SetSprite(playerObj, "mario_hammer_n_3", 0.25f);
-		Play::SetSprite(hammerObj, "ham_mario_n_3", 0.25f);
+		Play::SetSprite(playerObj, "mario_hammer_n_3", 0.15f);
+		Play::SetSprite(hammerObj, "ham_mario_n_3", 0.10f);
 
 		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
 		{
@@ -1080,8 +1174,8 @@ void HandleHammerAnimations()
 	}
 	else if (playerOrientation == vOrientations.at(1))
 	{
-		Play::SetSprite(playerObj, "mario_hammer_e_3", 0.25f);
-		Play::SetSprite(hammerObj, "ham_mario_w_3", 0.25f);
+		Play::SetSprite(playerObj, "mario_hammer_e_3", 0.15f);
+		Play::SetSprite(hammerObj, "ham_mario_w_3", 0.10f);
 
 		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
 		{
@@ -1090,8 +1184,8 @@ void HandleHammerAnimations()
 	}
 	else if (playerOrientation == vOrientations.at(2))
 	{
-		Play::SetSprite(playerObj, "mario_hammer_s_3", 0.25f);
-		Play::SetSprite(hammerObj, "ham_mario_s_3", 0.25f);
+		Play::SetSprite(playerObj, "mario_hammer_s_3", 0.15f);
+		Play::SetSprite(hammerObj, "ham_mario_s_3", 0.10f);
 
 		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
 		{
@@ -1100,8 +1194,8 @@ void HandleHammerAnimations()
 	}
 	else if (playerOrientation == vOrientations.at(3))
 	{
-		Play::SetSprite(playerObj, "mario_hammer_w_3", 0.25f);
-		Play::SetSprite(hammerObj, "ham_mario_e_3", 0.25f);
+		Play::SetSprite(playerObj, "mario_hammer_w_3", 0.15f);
+		Play::SetSprite(hammerObj, "ham_mario_e_3", 0.10f);
 
 		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
 		{
@@ -1114,14 +1208,14 @@ void HandleHammerAnimations()
 //												SPAWN FUNCTIONS	
 
 //Used to spawn enemies in initial stage
-void SpawnEnemies(int stage) 
+void SpawnEnemies() 
 {
 	/*if (stage == 1) 
 	{*/
 		//Goombas
 		//for (int i = 0; i < 2; i++) 
 		//{
-		//	int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(stage), 10, "goomba_walk_e_8");
+		//	int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(), 10, "goomba_walk_e_8");
 		//	GameObject& goombaObj = Play::GetGameObject(goombaID);
 		//	SetVelocity(goombaObj, "x");
 		//}
@@ -1129,7 +1223,7 @@ void SpawnEnemies(int stage)
 		////BobBomb
 		//for (int i = 0; i < 2; i++) 
 		//{
-		//	int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(stage), 10, "bobbomb_walk_e_8");
+		//	int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(), 10, "bobbomb_walk_e_8");
 		//	GameObject& bobBombObj = Play::GetGameObject(bobbombID);
 		//	SetVelocity(bobBombObj, "x");
 		//}
@@ -1139,20 +1233,16 @@ void SpawnEnemies(int stage)
 
 		//if (chance == 1) 
 		//{
-			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(stage), 15, "magikoopa_s_8");
+			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(), 15, "magikoopa_s_8");
 			GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
 			SetVelocity(magiKoopaObj, "y");
 	//	}
 	//	else 
 	//	{
-	//		int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(stage), 15, "drybones_s_16");
+	//		int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(), 15, "drybones_s_16");
 	//		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
 	//		SetVelocity(dryBonesObj, "both");
 	//	}
-	//}
-	//else if (stage == 2) 
-	//{
-
 	//}
 }
 
@@ -1161,19 +1251,19 @@ void SpawnPlayerConsumables()
 {
 	if (gameState.playerHP <= 3 && Play::CollectGameObjectIDsByType(typeGoldenMushroom).size() < 1)
 	{
-		int goldenMushroomID = Play::CreateGameObject(typeGoldenMushroom, GetRandomPositionInPS(gameState.stage), 20, "invincible_powerup");
+		int goldenMushroomID = Play::CreateGameObject(typeGoldenMushroom, GetRandomPositionInPS(), 20, "invincible_powerup");
 		GameObject& goldenMushroomObj = Play::GetGameObject(goldenMushroomID);
 		SetVelocity(goldenMushroomObj, "both");
 	}
 	else if (gameState.playerHP < 3 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 2)
 	{
-		int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(gameState.stage), 20, "health_up");
+		int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(), 20, "health_up");
 		GameObject& healthUpObj = Play::GetGameObject(healthUpID);
 		SetVelocity(healthUpObj, "both");
 	}
 	else if (gameState.playerState == PlayerState::playerDebuffed && Play::CollectGameObjectIDsByType(typeRefreshingHerb).size() < 1)
 	{
-		int refreshingHerbID = Play::CreateGameObject(typeRefreshingHerb, GetRandomPositionInPS(gameState.stage), 20, "refreshing_herb");
+		int refreshingHerbID = Play::CreateGameObject(typeRefreshingHerb, GetRandomPositionInPS(), 20, "refreshing_herb");
 		GameObject& refreshingHerbObj = Play::GetGameObject(refreshingHerbID);
 		SetVelocity(refreshingHerbObj, "both");
 	}
@@ -1185,9 +1275,9 @@ void SpawnPlayerConsumables()
 //          OBJECT RELATED:
 
 //Used to bounce certain objects so they stay in the play space
-void ScreenBouncing(GameObject& gameObj, int stage) 
+void ScreenBouncing(GameObject& gameObj, bool choice) 
 {
-	if (stage == 1) 
+	if (choice == true) 
 	{
 		if (gameObj.type == typePlayer) 
 		{
@@ -1230,50 +1320,6 @@ void ScreenBouncing(GameObject& gameObj, int stage)
 			}
 		}
 	}
-	else if (stage == 2) 
-	{
-		
-		if (gameObj.type == typePlayer)
-		{
-			if (gameObj.pos.x < 0)
-			{
-				gameObj.pos = gameObj.oldPos;
-			}
-			else if (gameObj.pos.x > displayWidth)
-			{
-				gameObj.pos = gameObj.oldPos;
-			}
-
-			if (gameObj.pos.y > 630)
-			{
-				gameObj.pos = gameObj.oldPos;
-			}
-			else if (gameObj.pos.y < 380)
-			{
-				gameObj.pos = gameObj.oldPos;
-			}
-		}
-		else
-		{
-			if (gameObj.pos.x < 0)
-			{
-				gameObj.velocity.x *= -1;
-			}
-			else if (gameObj.pos.x > displayWidth)
-			{
-				gameObj.velocity.x *= -1;
-			}
-
-			if (gameObj.pos.y > 630)
-			{
-				gameObj.velocity.y *= -1;
-			} 
-			else if (gameObj.pos.y < 380)
-			{
-				gameObj.velocity.y *= -1;
-			}
-		}
-	}
 }
 
 //Used to set an objects velocity to soley x, y or a combination of the two
@@ -1294,16 +1340,9 @@ void SetVelocity(GameObject& gameObj, std::string choice)
 }
 
 //Used to get a point2f value that is the play space of the relevant stage
-Point2f GetRandomPositionInPS(int stage) 
+Point2f GetRandomPositionInPS() 
 {
-	if (stage == 1) 
-	{
-		return Point2f(Play::RandomRollRange(0, displayWidth) , Play::RandomRollRange(395, 605));
-	}
-	else if (stage == 2) 
-	{
-		return Point2f(Play::RandomRollRange(0, displayWidth), Play::RandomRollRange(380, 630));
-	}
+	return Point2f(Play::RandomRollRange(0, displayWidth) , Play::RandomRollRange(395, 605));
 }
 
 //Used to decelerate game objects
@@ -1316,19 +1355,9 @@ void DecelerateObject(GameObject& gameObj, float rate)
 //			UI RELATED:
 
 //Used to draw UI
-void DrawUI() {}
-
-//Used to load different stage backgrounds
-void UpdateStageBackground(int stage) 
+void DrawUI() 
 {
-	if (stage == 1)
-	{
-		Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
-	}
-	else if (stage == 2)
-	{
-		Play::LoadBackground("Data\\Backgrounds\\stage2bg.png");
-	}
+	//Draw health Mushrooms
 }
 
 //          MISCELLANEOUS:
