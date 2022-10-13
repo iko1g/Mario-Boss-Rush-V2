@@ -14,13 +14,17 @@ int secondsDebug = 0;
 
 const std::vector<std::string> vOrientations = { "N", "E", "S", "W" };
 std::string playerOrientation{};
-bool playerisDebuffed;
+bool playerisDebuffed = false;
+bool debugging = false;
+//bool wasGoingDown;
+
 
 enum PlayerState 
 {
 	playerAppear = 0,
 	playerNotDebuffed,
 	playerDebuffed,
+	playerTransform,
 	playerDamaged,
 	playerHeal,
 	playerAttack,
@@ -69,6 +73,7 @@ enum GameObjectType
 	typeBowser,
 	//Miscellaneous Types
 	typeDestroyed,
+	typeSpikes,
 };
 
 struct GameState 
@@ -105,7 +110,7 @@ void UpdateMagiKoopa();
 //			STAGE RELATED:
 
 void UpdateStageState();
-
+void UpdateSpikes();
 //          MISCELLANEOUS:
 
 void UpdateDestroyed();
@@ -145,7 +150,7 @@ void UpdateStageBackground(int);
 int PickBetween(int, int);
 float FindDistance(GameObject&, GameObject&);
 float GenRandomNumRange(float,float);
-bool InBetween(float, float, float);
+bool IsInBetween(float, float, float);
 
 //-------------------------------------------------------------------------------------------------------------------------------
 //												DEBUG FUNCTIONS	
@@ -160,8 +165,9 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	Play::CreateManager( displayWidth, displayHeight, displayScale );
 	Play::CentreAllSpriteOrigins();
 	UpdateStageBackground(gameState.stage);
+	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
 	Play::CreateGameObject(typePlayer, { displayWidth / 2, 505 }, 15, "mario_idle_s_35");
-	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 25, "ham_mario_s_3");
+	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 20, "ham_mario_s_3");
 	SpawnEnemies(gameState.playerState);
 }
 
@@ -173,7 +179,7 @@ bool MainGameUpdate( float elapsedTime )
 	Play::DrawFontText("SuperMario25636px_10x10", "STAGE " + std::to_string(gameState.stage), { 80 , 25 }, Play::CENTRE);
 	Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), {displayWidth - 80 , 25 }, Play::CENTRE);
 	Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth / 2 , 25 }, Play::CENTRE);
-	/*Play::DrawFontText("SuperMario25636px_10x10", std::to_string(gameState.playerHP), { displayWidth / 2 , 15 }, Play::CENTRE);*/
+	/*Play::DrawFontText("SuperMario25636px_10x10", std::to_string(gameState.playerHP), { displayWidth / 2 , 45 }, Play::CENTRE);*/
 	UpdateTime();
 	UpdateGoombas();
 	UpdateBobBombs();
@@ -181,8 +187,14 @@ bool MainGameUpdate( float elapsedTime )
 	UpdateDryBones();;
 	UpdatePlayerState();
 	UpdateHammer();
+	UpdateSpikes();
 	UpdateDestroyed();
-	ShowDebugUI();
+
+	if (debugging) 
+	{ 
+		ShowDebugUI(); 
+	}
+	
 	Play::PresentDrawingBuffer();
 	return Play::KeyDown( VK_ESCAPE );
 }
@@ -214,14 +226,32 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerNotDebuffed:
 	{
-		playerisDebuffed = false;
 		HandleNotDebuffedControls();
 	}
 	break;
 	case PlayerState::playerDebuffed:
 	{
-		playerisDebuffed = true;
 		HandleDebuffedControls();
+	}
+	break;
+	case PlayerState::playerTransform:
+	{
+		if (playerisDebuffed) 
+		{
+			Play::SetSprite(playerObj, "mario_normaltofat_22", 0.35f);
+			if (Play::IsAnimationComplete(playerObj)) 
+			{
+				gameState.playerState = PlayerState::playerDebuffed;
+			}
+		}
+		else if (playerisDebuffed == false)
+		{
+			Play::SetSprite(playerObj, "mario_fattonormal_18", 0.25f);
+			if (Play::IsAnimationComplete(playerObj))
+			{
+				gameState.playerState = PlayerState::playerNotDebuffed;
+			}
+		}
 	}
 	break;
 	case PlayerState::playerDamaged:
@@ -764,36 +794,120 @@ void UpdateMagiKoopa()
 	//if player is x is less than mk x then launch projectile left else right
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
-	GameObject& magiKoopaObj = Play::GetGameObjectByType(typeMagiKoopa);
+	std::vector<int> vMagiKoopa = Play::CollectGameObjectIDsByType(typeMagiKoopa);
 
-	float playerToMagiAng = atan2f(playerObj.pos.y - magiKoopaObj.pos.y, playerObj.pos.x - magiKoopaObj.pos.x);
-	//if angle between player and object is equal to 90 degrees or 270 degrees
-	//set temp value to old Velocity value
-	// if player is left then do left animation --> spawn projectile going left
-	// else right animation --> spawn projectile going right
-	//if projecile is not visible and hasnt collided with playe then destroy
-	//if player collides with projectile then set player state to debuffed and minus 1 from health
-	//if player hammers koopa delete koopa
-
-	ScreenBouncing(magiKoopaObj, gameState.stage);
-
-	if (magiKoopaObj.velocity.y < 0)
+	for (int magiKoopaID: vMagiKoopa) 
 	{
-		Play::SetSprite(magiKoopaObj, "magikoopa_n_8", 0.25f);
-	}
-	else if (magiKoopaObj.velocity.y > 0)
-	{
-		Play::SetSprite(magiKoopaObj, "magikoopa_s_8", 0.25f);
+		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+		float playerToMagiAng = atan2f(magiKoopaObj.pos.y - playerObj.pos.y, magiKoopaObj.pos.x - playerObj.pos.x);
+		bool wasGoingDown = false;
+
+		if (magiKoopaObj.velocity.y < 0)
+		{
+			Play::SetSprite(magiKoopaObj, "magikoopa_n_8", 0.25f);
+			wasGoingDown = false;
+
+		}
+		else if (magiKoopaObj.velocity.y > 0)
+		{
+			Play::SetSprite(magiKoopaObj, "magikoopa_s_8", 0.25f);
+			wasGoingDown = true;
+		}
+
+		if (playerObj.pos.x < magiKoopaObj.pos.x && IsInBetween(0.087f ,-0.087f,playerToMagiAng) && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
+		{
+			magiKoopaObj.velocity = {0,0};
+			Play::SetSprite(magiKoopaObj, "magikoopabattle_w_12", 0.25f);
+			if (magiKoopaObj.frame == 3) 
+			{
+				int projectileID = Play::CreateGameObject(typeMagiKoopaProj, {magiKoopaObj.pos.x -2, magiKoopaObj.pos.y}, 10, "peachvoice_proj_8");
+				GameObject& projectileObj = Play::GetGameObject(projectileID);
+
+				projectileObj.scale = 0.7;
+				projectileObj.rotation = (3 * PLAY_PI) / 2;
+				projectileObj.animSpeed = 0.25f;
+				projectileObj.velocity = { -2, 0 };
+
+				if (wasGoingDown)
+				{
+					magiKoopaObj.velocity.y = 2;
+				}
+				else
+				{
+					magiKoopaObj.velocity.y = -2;
+				}
+			} 
+		}
+		else if (playerObj.pos.x > magiKoopaObj.pos.x && IsInBetween(3.054f, -3.054f, playerToMagiAng) && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
+		{
+			magiKoopaObj.velocity = { 0,0 };
+			Play::SetSprite(magiKoopaObj, "magikoopabattle_e_12", 0.25f);
+			if (magiKoopaObj.frame == 3)
+			{
+				int projectileID = Play::CreateGameObject(typeMagiKoopaProj, { magiKoopaObj.pos.x + 2, magiKoopaObj.pos.y }, 10, "peachvoice_proj_8");
+				GameObject& projectileObj = Play::GetGameObject(projectileID);
+
+				projectileObj.scale = 0.7;
+				projectileObj.rotation = PLAY_PI / 2;
+				projectileObj.animSpeed = 0.25f;
+				projectileObj.velocity = { 2, 0 };
+
+				if (wasGoingDown)
+				{
+					magiKoopaObj.velocity.y = 2;
+				}
+				else
+				{
+					magiKoopaObj.velocity.y = -2;
+				}
+			}
+		}
+		ScreenBouncing(magiKoopaObj, gameState.stage);
+		Play::UpdateGameObject(magiKoopaObj);
+		Play::DrawObjectRotated(magiKoopaObj);
 	}
 
-	Play::UpdateGameObject(magiKoopaObj);
-	Play::DrawObjectRotated(magiKoopaObj);
+	std::vector<int> vProjectiles = Play::CollectGameObjectIDsByType(typeMagiKoopaProj);
+
+	for (int mProjectileID : vProjectiles) 
+	{
+		bool hasCollided = false;
+		GameObject& mProjectileObj = Play::GetGameObject(mProjectileID);
+		
+		if (Play::IsColliding(mProjectileObj, playerObj) && playerisDebuffed == false) 
+		{
+			hasCollided = true;
+			playerisDebuffed = true;
+	        gameState.playerState = PlayerState::playerTransform;
+		}
+		else if (Play::IsColliding(mProjectileObj, playerObj) && playerisDebuffed)
+		{
+			hasCollided = true;
+			gameState.playerState = PlayerState::playerDamaged;
+		}
+
+		if (!Play::IsVisible(mProjectileObj) || hasCollided) 
+		{
+			mProjectileObj.type = typeDestroyed;
+		}
+
+		Play::UpdateGameObject(mProjectileObj);
+		Play::DrawObjectRotated(mProjectileObj);
+	}
 }
 
 //			STAGE RELATED:
 
+//Used to update stage state
 void UpdateStageState() {}
 
+//Used to draws spikes
+void UpdateSpikes() 
+{
+	GameObject& spikeObj = Play::GetGameObjectByType(typeSpikes);
+	Play::UpdateGameObject(spikeObj);
+	Play::DrawObject(spikeObj);
+}
 //          MISCELLANEOUS:
 
 //Used to update destroyed objects ()
@@ -845,25 +959,25 @@ void HandleNotDebuffedControls()
 	if (Play::KeyDown(VK_UP)) 
 	{
 		playerObj.velocity = { 0,-2.5f };
-		Play::SetSprite(playerObj, "mario_walk_n_12", 0.35f);
+		Play::SetSprite(playerObj, "mario_walk_n_12", 0.25f);
 		playerOrientation = vOrientations.at(0);
 	}
 	else if (Play::KeyDown(VK_RIGHT)) 
 	{
 		playerObj.velocity = { 2.5f,0 };
-		Play::SetSprite(playerObj, "mario_walk_e_12", 0.35f);
+		Play::SetSprite(playerObj, "mario_walk_e_12", 0.25f);
 		playerOrientation = vOrientations.at(1);
 	}
 	else if (Play::KeyDown(VK_DOWN)) 
 	{
 		playerObj.velocity = { 0,2.5f };
-		Play::SetSprite(playerObj, "mario_walk_s_12", 0.35f);
+		Play::SetSprite(playerObj, "mario_walk_s_12", 0.25f);
 		playerOrientation = vOrientations.at(2);
 	}
 	else if (Play::KeyDown(VK_LEFT)) 
 	{
 		playerObj.velocity = { -2.5f,0 };
-		Play::SetSprite(playerObj, "mario_walk_w_12", 0.35f);
+		Play::SetSprite(playerObj, "mario_walk_w_12", 0.25f);
 		playerOrientation = vOrientations.at(3);
 	}
 	else 
@@ -873,19 +987,19 @@ void HandleNotDebuffedControls()
 		{
 			if (playerOrientation == vOrientations.at(0))
 			{
-				Play::SetSprite(playerObj, "mario_idle_n_35", 0.35f);
+				Play::SetSprite(playerObj, "mario_idle_n_35", 0.25f);
 			}
 			else if (playerOrientation == vOrientations.at(1))
 			{
-				Play::SetSprite(playerObj, "mario_idle_e_35", 0.35f);
+				Play::SetSprite(playerObj, "mario_idle_e_35", 0.25f);
 			}
 			else if (playerOrientation == vOrientations.at(2))
 			{
-				Play::SetSprite(playerObj, "mario_idle_s_35", 0.35f);
+				Play::SetSprite(playerObj, "mario_idle_s_35", 0.25f);
 			}
 			else if (playerOrientation == vOrientations.at(3))
 			{
-				Play::SetSprite(playerObj, "mario_idle_w_35", 0.35f);
+				Play::SetSprite(playerObj, "mario_idle_w_35", 0.25f);
 			}
 		}
 	}
@@ -1002,44 +1116,44 @@ void HandleHammerAnimations()
 //Used to spawn enemies in initial stage
 void SpawnEnemies(int stage) 
 {
-	if (stage == 1) 
-	{
+	/*if (stage == 1) 
+	{*/
 		//Goombas
-		for (int i = 0; i < 2; i++) 
-		{
-			int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(stage), 10, "goomba_walk_e_8");
-			GameObject& goombaObj = Play::GetGameObject(goombaID);
-			SetVelocity(goombaObj, "x");
-		}
+		//for (int i = 0; i < 2; i++) 
+		//{
+		//	int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(stage), 10, "goomba_walk_e_8");
+		//	GameObject& goombaObj = Play::GetGameObject(goombaID);
+		//	SetVelocity(goombaObj, "x");
+		//}
 
-		//BobBomb
-		for (int i = 0; i < 2; i++) 
-		{
-			int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(stage), 10, "bobbomb_walk_e_8");
-			GameObject& bobBombObj = Play::GetGameObject(bobbombID);
-			SetVelocity(bobBombObj, "x");
-		}
+		////BobBomb
+		//for (int i = 0; i < 2; i++) 
+		//{
+		//	int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(stage), 10, "bobbomb_walk_e_8");
+		//	GameObject& bobBombObj = Play::GetGameObject(bobbombID);
+		//	SetVelocity(bobBombObj, "x");
+		//}
 
-		//Magi Koopa and DryBones
-		int chance = PickBetween(1, -1);
+		////Magi Koopa and DryBones
+		//int chance = PickBetween(1, -1);
 
-		if (chance == 1) 
-		{
+		//if (chance == 1) 
+		//{
 			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(stage), 15, "magikoopa_s_8");
 			GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
 			SetVelocity(magiKoopaObj, "y");
-		}
-		else 
-		{
-			int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(stage), 15, "drybones_s_16");
-			GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
-			SetVelocity(dryBonesObj, "both");
-		}
-	}
-	else if (stage == 2) 
-	{
+	//	}
+	//	else 
+	//	{
+	//		int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(stage), 15, "drybones_s_16");
+	//		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+	//		SetVelocity(dryBonesObj, "both");
+	//	}
+	//}
+	//else if (stage == 2) 
+	//{
 
-	}
+	//}
 }
 
 //used to spawn player consumables
@@ -1086,11 +1200,11 @@ void ScreenBouncing(GameObject& gameObj, int stage)
 				gameObj.pos = gameObj.oldPos;
 			}
 
-			if (gameObj.pos.y > 660)
+			if (gameObj.pos.y > 605)
 			{
 				gameObj.pos = gameObj.oldPos;
 			}
-			else if (gameObj.pos.y < 470)
+			else if (gameObj.pos.y < 395)
 			{
 				gameObj.pos = gameObj.oldPos;
 			}
@@ -1106,11 +1220,11 @@ void ScreenBouncing(GameObject& gameObj, int stage)
 				gameObj.velocity.x *= -1;
 			}
 
-			if (gameObj.pos.y > 660)
+			if (gameObj.pos.y > 605)
 			{
 				gameObj.velocity.y *= -1;
 			}
-			else if (gameObj.pos.y < 470) 
+			else if (gameObj.pos.y < 395) 
 			{
 				gameObj.velocity.y *= -1;
 			}
@@ -1184,7 +1298,7 @@ Point2f GetRandomPositionInPS(int stage)
 {
 	if (stage == 1) 
 	{
-		return Point2f(Play::RandomRollRange(0, displayWidth) , Play::RandomRollRange(470, 660));
+		return Point2f(Play::RandomRollRange(0, displayWidth) , Play::RandomRollRange(395, 605));
 	}
 	else if (stage == 2) 
 	{
@@ -1209,7 +1323,7 @@ void UpdateStageBackground(int stage)
 {
 	if (stage == 1)
 	{
-		Play::LoadBackground("Data\\Backgrounds\\stage1bg.png");
+		Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
 	}
 	else if (stage == 2)
 	{
@@ -1255,7 +1369,7 @@ float GenRandomNumRange(float lowerNum, float upperNum)
 }
 
 //Used to check if number is between two other numbers
-bool InBetween(float upperBound, float lowerBound, float num) 
+bool IsInBetween(float upperBound, float lowerBound, float num)
 {
 	return (lowerBound <= num && num <= upperBound);
 }
@@ -1314,7 +1428,7 @@ void ShowDebugUI()
 	Play::DrawDebugText({ dryBonesObj.pos.x, dryBonesObj.pos.y + 10 }, playerToDryBonesAngString.c_str(), Play::cGreen);
 	Play::DrawDebugText(dryBonesObj.pos, "DD Here", Play::cGreen);
 
-	float playerToMagiAng = atan2f(playerObj.pos.y - magiKoopaObj.pos.y, playerObj.pos.x - magiKoopaObj.pos.x) + PLAY_PI / 2;
+	float playerToMagiAng = atan2f( magiKoopaObj.pos.y - playerObj.pos.y, magiKoopaObj.pos.x - playerObj.pos.x);
 	std::string playerToMagiKoopaAngString = std::to_string(playerToMagiAng);
 	Play::DrawDebugText({ magiKoopaObj.pos.x, magiKoopaObj.pos.y + 10 }, playerToMagiKoopaAngString.c_str(), Play::cGreen);
 	Play::DrawDebugText(magiKoopaObj.pos, "MK Here", Play::cGreen);
