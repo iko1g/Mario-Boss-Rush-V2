@@ -68,7 +68,6 @@ struct GameState
 	int bossHp = 4;
 	int playerHP = 3;
 	int score = 0;
-	int stage = 1;
 	int framesPassed = 0;
 	PlayerState playerState = PlayerState::playerNotDebuffed;
 	BossState bossState = BossState::bossAppear;
@@ -95,7 +94,6 @@ void UpdateMagiKoopa();
 
 //			STAGE RELATED:
 
-void UpdateStageState();
 void UpdateSpikes();
 //          MISCELLANEOUS:
 
@@ -128,7 +126,7 @@ void DecelerateObject(GameObject&, float);
 
 //			UI RELATED:
 
-void DrawUI();
+void CreateUI();
 
 //          MISCELLANEOUS:
 
@@ -152,7 +150,7 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
 	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
 	Play::CreateGameObject(typePlayer, { displayWidth / 2, 505 }, 15, "mario_idle_s_35");
-	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 20, "ham_mario_s_3");
+	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
 	SpawnEnemies();
 }
 
@@ -205,6 +203,8 @@ void UpdatePlayerState()
 	case PlayerState::playerAppear:
 	{
 		//Play walks from left when x is certain value statenotdebuffed
+		//or maybe just in case if enemy is spawned on player 
+		//move to playerpowerup
 	}
 	break;
 	case PlayerState::playerNotDebuffed:
@@ -292,7 +292,6 @@ void UpdatePlayerState()
 			gameState.bossHp = 4;
 			gameState.playerHP = 3;
 			gameState.score = 0;
-			gameState.stage = 1;
 			gameState.framesPassed = 0;
 			
 			//start audio loop
@@ -354,6 +353,11 @@ void UpdatePlayerState()
 	case PlayerState::playerPowerUp:
 	{
 		//player will be in this state for 5 seconds and will be invincible
+		//have counter variable
+		//keep adding to counter while in state
+		//if counter % 4 = 0 colour player sprite yellow
+		//else colour it white (clear colouring)
+		//if 5 seconds have passed move to relevant debuff or nondebuff state
 	}
 	break;
 	}
@@ -982,7 +986,6 @@ void UpdateMagiKoopa()
 		{
 			mProjectileObj.type = typeDestroyed;
 		}
-
 		Play::UpdateGameObject(mProjectileObj);
 		Play::DrawObjectRotated(mProjectileObj);
 	}
@@ -1026,6 +1029,7 @@ void UpdateDestroyed()
 void UpdateUI() 
 {
 	//if player is damaged remove 1 from healthicons
+	//if healed add one to health icons
 }
 
 //Used to update time passed
@@ -1210,40 +1214,38 @@ void HandleHammerAnimations()
 //Used to spawn enemies in initial stage
 void SpawnEnemies() 
 {
-	/*if (stage == 1) 
-	{*/
-		//Goombas
-		//for (int i = 0; i < 2; i++) 
-		//{
-		//	int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(), 10, "goomba_walk_e_8");
-		//	GameObject& goombaObj = Play::GetGameObject(goombaID);
-		//	SetVelocity(goombaObj, "x");
-		//}
+	//Goombas
+	for (int i = 0; i < 2; i++) 
+	{
+		int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(), 10, "goomba_walk_e_8");
+		GameObject& goombaObj = Play::GetGameObject(goombaID);
+		SetVelocity(goombaObj, "x");
+	}
 
-		////BobBomb
-		//for (int i = 0; i < 2; i++) 
-		//{
-		//	int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(), 10, "bobbomb_walk_e_8");
-		//	GameObject& bobBombObj = Play::GetGameObject(bobbombID);
-		//	SetVelocity(bobBombObj, "x");
-		//}
+	//BobBomb
+	for (int i = 0; i < 2; i++) 
+	{
+		int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(), 10, "bobbomb_walk_e_8");
+		GameObject& bobBombObj = Play::GetGameObject(bobbombID);
+		SetVelocity(bobBombObj, "x");
+	}
 
-		////Magi Koopa and DryBones
-		//int chance = PickBetween(1, -1);
+	//Magi Koopa and DryBones
+	int chance = PickBetween(1, -1);
 
-		//if (chance == 1) 
-		//{
-			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(), 15, "magikoopa_s_8");
-			GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
-			SetVelocity(magiKoopaObj, "y");
-	//	}
-	//	else 
-	//	{
-	//		int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(), 15, "drybones_s_16");
-	//		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
-	//		SetVelocity(dryBonesObj, "both");
-	//	}
-	//}
+	if (chance == 1) 
+	{
+		int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(), 15, "magikoopa_s_8");
+		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+		SetVelocity(magiKoopaObj, "y");
+	}
+	else 
+	{
+		int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(), 15, "drybones_s_16");
+		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+		SetVelocity(dryBonesObj, "both");
+	}
+	
 }
 
 //used to spawn player consumables
@@ -1355,7 +1357,7 @@ void DecelerateObject(GameObject& gameObj, float rate)
 //			UI RELATED:
 
 //Used to draw UI
-void DrawUI() 
+void CreateUI() 
 {
 	//Draw health Mushrooms
 }
