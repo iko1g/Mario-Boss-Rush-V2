@@ -3,16 +3,15 @@
 #include "Play.h"
 #include <random>
 
-int displayWidth = 1280;
-int displayHeight = 720;
-int displayScale = 1;
+const int displayWidth = 1280;
+const int displayHeight = 720;
+const int displayScale = 1;
 int seconds = 0;
 
 const std::vector<std::string> vOrientations = { "N", "E", "S", "W" };
 std::string playerOrientation{};
 bool playerisDebuffed = false;
 bool debugging = false;
-
 
 enum PlayerState 
 {
@@ -123,6 +122,7 @@ void ScreenBouncing(GameObject&, bool);
 void SetVelocity(GameObject&, std::string);
 Point2f GetRandomPositionInPS();
 void DecelerateObject(GameObject&, float);
+void ClearEnemiesOnScreen();
 
 //			UI RELATED:
 
@@ -151,6 +151,7 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
 	Play::CreateGameObject(typePlayer, { displayWidth / 2, 505 }, 15, "mario_idle_s_35");
 	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
+	CreateUI();
 	SpawnEnemies();
 }
 
@@ -219,6 +220,8 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerTransform:
 	{
+		//Used to move player from debuffed to notDebuffed state 
+		//after they have collided with a magikoopa projectile or refreshing herb
 		if (playerisDebuffed) 
 		{
 			Play::SetSprite(playerObj, "mario_normaltofat_22", 0.35f);
@@ -239,7 +242,7 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerDamaged:
 	{
-		//Minus player health and move to relevant move state
+		//Minus 1 player health and move to relevant move state
 		if (gameState.playerHP - 1 == 0)
 		{
 			gameState.playerHP--;
@@ -262,7 +265,7 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerHeal:
 	{
-		// Plus player health and move to relevant move state
+		// Plus 1 to player health and move to relevant move state
 		gameState.playerHP++;
 
 		if (playerisDebuffed)
@@ -297,53 +300,7 @@ void UpdatePlayerState()
 			//start audio loop
 
 			//Delete all enemies and move boss to off screen
-
-			for (int goombaID : Play::CollectGameObjectIDsByType(typeGoomba)) 
-			{
-				Play::GetGameObject(goombaID).type = typeDestroyed;
-			}
-
-			for (int bombaAID : Play::CollectGameObjectIDsByType(typeBobBombAlight))
-			{
-				Play::GetGameObject(bombaAID).type = typeDestroyed;
-			}
-
-			for (int bombaNAID : Play::CollectGameObjectIDsByType(typeBobBombNotAlight))
-			{
-				Play::GetGameObject(bombaNAID).type = typeDestroyed;
-			}
-
-			for (int bombaEx : Play::CollectGameObjectIDsByType(typeBobBombExplosion))
-			{
-				Play::GetGameObject(bombaEx).type = typeDestroyed;
-			}
-
-			for (int dryBonesID : Play::CollectGameObjectIDsByType(typeDryBones))
-			{
-				Play::GetGameObject(dryBonesID).type = typeDestroyed;
-			}
-
-			for (int dryBonesHeadID : Play::CollectGameObjectIDsByType(typeDryBoneHead))
-			{
-				Play::GetGameObject(dryBonesHeadID).type = typeDestroyed;
-			}
-
-			for (int dryBonesBodyID : Play::CollectGameObjectIDsByType(typeDryBoneBody))
-			{
-				Play::GetGameObject(dryBonesBodyID).type = typeDestroyed;
-			}
-
-			for (int magiKoopaID : Play::CollectGameObjectIDsByType(typeMagiKoopa))
-			{
-				Play::GetGameObject(magiKoopaID).type = typeDestroyed;
-			}
-
-			for (int magiKoopaProjID : Play::CollectGameObjectIDsByType(typeMagiKoopaProj))
-			{
-				Play::GetGameObject(magiKoopaProjID).type = typeDestroyed;
-			}
-
-			//make sure to delete bowser effects/attacks
+			ClearEnemiesOnScreen();
 
 			gameState.playerState = PlayerState::playerAppear;
 			gameState.bossState = BossState::bossAppear;
@@ -382,6 +339,8 @@ void UpdateConsumables()
 	std::vector<int> vGoldenMushrooms = Play::CollectGameObjectIDsByType(typeGoldenMushroom);
 	std::vector<int> vRefreshingHerbs = Play::CollectGameObjectIDsByType(typeRefreshingHerb);
 
+	//Healthup object
+	//If player collides with healthup then move state to player heal
 	for (int healthUpID : vHealthUps)
 	{
 		GameObject& healthUpObj = Play::GetGameObject(healthUpID);
@@ -395,6 +354,7 @@ void UpdateConsumables()
 				gameState.playerState = PlayerState::playerHeal;
 			}
 
+			//destroy gameobject if player has collided with it
 			if (hasCollidedHealth)
 			{
 				healthUpObj.type = typeDestroyed;
@@ -406,6 +366,8 @@ void UpdateConsumables()
 		Play::DrawObject(healthUpObj);
 	}
 
+	//Golden mushroom object
+	//If player collides with  Golden mushroom then move state to player power up
 	for (int goldenMushroomsID : vGoldenMushrooms)
 	{
 		GameObject& goldenMushroomObj = Play::GetGameObject(goldenMushroomsID);
@@ -419,6 +381,7 @@ void UpdateConsumables()
 				gameState.playerState = PlayerState::playerPowerUp;
 			}
 
+			//destroy gameobject if player has collided with it
 			if (hasCollidedGoldM)
 			{
 				goldenMushroomObj.type = typeDestroyed;
@@ -428,7 +391,9 @@ void UpdateConsumables()
 		Play::UpdateGameObject(goldenMushroomObj);
 		Play::DrawObject(goldenMushroomObj);
 	}
-
+	
+	//Refreshing herb object
+    //If player collides with refreshing herb then move state to playernotdebuffed
 	for (int refreshingHerbID : vRefreshingHerbs)
 	{
 		GameObject& refreshingHerbObj = Play::GetGameObject(refreshingHerbID);
@@ -460,8 +425,10 @@ void UpdateHammer()
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
 
+	//keeps hammer and player positions the same 
 	hammerObj.pos = playerObj.pos;
 
+	//Dont draw hammer unless in attack state
 	if (gameState.playerState == PlayerState::playerAttack)
 	{
 		Play::UpdateGameObject(hammerObj);
@@ -470,7 +437,6 @@ void UpdateHammer()
 	else
 	{
 		Play::UpdateGameObject(hammerObj);
-		Play::DrawObjectTransparent(hammerObj, 0);
 	}
 }
 
@@ -486,7 +452,7 @@ void UpdateBossState()
 	{
 	case BossState::bossAppear:
 	{
-		//boss will walk from left
+		//boss will walk from right
 		//once they reach certain x amount move to idle
 	}
 	break;
@@ -495,8 +461,7 @@ void UpdateBossState()
 		//play Idle animation for 4 seconds
 		//if player is long ranged  set long range to true then move to boss agro
 		//if player is close ranged set long range to false then move to boss agro
-		//if enemy lists are empty then move to boss summon mob
-
+		//if enemy lists are empty then move to boss summon mob 
 	}
 	break;
 	case BossState::bossAgro:
@@ -543,25 +508,26 @@ void UpdateGoombas()
 		bool userCollided = false;
 		GameObject& goombaObj = Play::GetGameObject(goombaID);
 
+		//if player is normal or debuff state and colliding with goomba move to damage state
 		if (gameState.playerState == PlayerState::playerNotDebuffed || gameState.playerState == PlayerState::playerDebuffed) 
 		{
 			if (Play::IsColliding(goombaObj, playerObj))
 			{
 				userCollided = true;
 				gameState.playerState = PlayerState::playerDamaged;
-				//play enemy attack/ damaging anim if 
 			}
 		}
 		else if (gameState.playerState == PlayerState::playerAttack)
 		{
+			//Set hammer collision to true so we can destroy object
 			if (Play::IsColliding(goombaObj,hammerObj)) 
 			{
 				hammerCollided = true;
 				gameState.score++;
-				//play enemy death anim
 			}
 		}
 
+		//If hammer or user has collided with the goomba then destroy game object
 		if (hammerCollided || userCollided) 
 		{
 			goombaObj.type = typeDestroyed;
@@ -586,7 +552,6 @@ void UpdateDryBones()
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
-	//GameObject& dryBonesObj = Play::GetGameObjectByType(typeDryBones);
 	
 	std::vector<int> vdryBones = Play::CollectGameObjectIDsByType(typeDryBones);
 
@@ -598,6 +563,7 @@ void UpdateDryBones()
 
 		if (distanceFromPlayer < 110)
 		{
+			//if player is left of dryBones
 			if (playerObj.pos.x < dryBonesObj.pos.x)
 			{
 				Play::DrawObjectTransparent(dryBonesObj, 0);
@@ -613,6 +579,7 @@ void UpdateDryBones()
 				isDistanceMet = true;
 
 			}
+			//if player is right of dryBones
 			else if (playerObj.pos.x > dryBonesObj.pos.x)
 			{
 				Play::DrawObjectTransparent(dryBonesObj, 0);
@@ -629,6 +596,7 @@ void UpdateDryBones()
 			}
 		}
 
+		//Set drybone to correct sprite based on ro
 		if (dryBonesObj.velocity.y < 0)
 		{
 			Play::SetSprite(dryBonesObj, "drybones_n_16", 0.25f);
@@ -638,6 +606,7 @@ void UpdateDryBones()
 			Play::SetSprite(dryBonesObj, "drybones_s_16", 0.25f);
 		}
 
+		// If distance is met then delete main drybones gameobject
 		if (isDistanceMet || !Play::IsVisible(dryBonesObj)) 
 		{
 			dryBonesObj.type = typeDestroyed;
@@ -645,18 +614,20 @@ void UpdateDryBones()
 
 		ScreenBouncing(dryBonesObj, true);
 		Play::UpdateGameObject(dryBonesObj);
-		Play::DrawObjectRotated(dryBonesObj);
+		Play::DrawObject(dryBonesObj);
 	}
 
 	std::vector<int> vdryBonesHeads = Play::CollectGameObjectIDsByType(typeDryBoneHead);
 	std::vector<int> vdryBonesBodies = Play::CollectGameObjectIDsByType(typeDryBoneBody);
 
+	//Update detached drybones body and head
 	for ( int dryBoneHeadID: vdryBonesHeads) 
 	{
 		GameObject& dryBoneHeadObj = Play::GetGameObject(dryBoneHeadID);
 		bool userHasCollided = false;
 		bool hammerHasCollided = false;
 
+		//if player collides with head then move state to player Damaged
 		if (Play::IsColliding(dryBoneHeadObj, playerObj)) 
 		{
 			userHasCollided = true;
@@ -664,8 +635,10 @@ void UpdateDryBones()
 		}
 		else 
 		{
+			//have head follow player
 			Play::PointGameObject(dryBoneHeadObj, 1, playerObj.pos.x, playerObj.pos.y);
 
+			//if 7 seconds have paassed and the head hasnt collided with the player then destroy the head and body
 			if (seconds % 7 == 0) 
 			{
 				dryBoneHeadObj.type = typeDestroyed;
@@ -678,12 +651,14 @@ void UpdateDryBones()
 			}
 		}
 
-		if (gameState.playerState == PlayerState::playerAttack) 
+		//if drybones head has collided with hammer set hammerhascollided to true so we can destroy it
+		if (gameState.playerState == PlayerState::playerAttack && Play::IsColliding(dryBoneHeadObj, hammerObj))
 		{
 			hammerHasCollided = true;
 			gameState.score + 3;
 		}
 
+		//If user has collided then move to damage and destroy head and body
 		if (userHasCollided) 
 		{
 			dryBoneHeadObj.type = typeDestroyed;
@@ -696,6 +671,7 @@ void UpdateDryBones()
 			}
 		}
 
+		//If hammer has collided add to score and delete object
 		if (hammerHasCollided)
 		{
 			dryBoneHeadObj.type = typeDestroyed;
@@ -733,12 +709,14 @@ void UpdateBobBombs()
 		GameObject& bobBombObj = Play::GetGameObject(bobBombID);
 		float distanceFromPlayer = FindDistance(bobBombObj, playerObj);
 
+		//If bobBomb is not alight and player is within 100 px then change type of bobBomb to alight and increase velocity of bobBomb 
 		if (isAlight == false && distanceFromPlayer < 100) 
 		{
 			bobBombObj.velocity *= 1.8;
 			bobBombObj.type = typeBobBombAlight;
 		}
 
+		//Set bobobmb to right sprite based on velocity
 		if (bobBombObj.velocity.x > 0) 
 		{
 			Play::SetSprite(bobBombObj, "bobbomb_walk_e_8", 0.25f);
@@ -747,7 +725,6 @@ void UpdateBobBombs()
 		{
 			Play::SetSprite(bobBombObj, "bobbomb_walk_w_8", 0.25f);
 		}
-
 		ScreenBouncing(bobBombObj, true);
 		Play::UpdateGameObject(bobBombObj);
 		Play::DrawObjectRotated(bobBombObj);
@@ -760,6 +737,7 @@ void UpdateBobBombs()
 		GameObject& bobBombObj = Play::GetGameObject(bobBombID);
 		bool isHammerColliding = false;
 
+		//If player has collided with bobBomb then spawn explosions and delete bobBomb object 
 		if (Play::IsColliding(bobBombObj, playerObj)) 
 		{
 			Play::DrawObjectTransparent(bobBombObj, 0);
@@ -788,11 +766,14 @@ void UpdateBobBombs()
 		}
 		else 
 		{
+			//if player hasnt collided with bobbomb and 3 seconds have passed
+			//set velocity to zero and set bobBomb to "sitting" sprite
 			if (seconds % 3 == 0)
 			{
 				bobBombObj.velocity = { 0,0 };
 				Play::SetSprite(bobBombObj, "bobbomb_walk_s_a_8", 0.25f);
 
+				//if 4 seconds have passed after that then then spawn explosions and delete bobBomb object 
 				if (seconds % 4 == 0) 
 				{
 					Play::DrawObjectTransparent(bobBombObj, 0);
@@ -821,6 +802,7 @@ void UpdateBobBombs()
 			}
 		}
 
+		//setting hammer colliding to true so we can delete game oject later
 		if (gameState.playerState == PlayerState::playerAttack && Play::IsColliding(bobBombObj, hammerObj))
 		{
 			isHammerColliding = true;
@@ -832,6 +814,7 @@ void UpdateBobBombs()
 			bobBombObj.type = typeDestroyed;
 		}
 
+		//Setting right sprite based on velocity
 		if (bobBombObj.velocity.x > 0)
 		{
 			Play::SetSprite(bobBombObj, "bobbomb_walk_e_a_8", 0.25f);
@@ -840,7 +823,6 @@ void UpdateBobBombs()
 		{
 			Play::SetSprite(bobBombObj, "bobbomb_walk_w_a_8", 0.25f);
 		}
-
 		ScreenBouncing(bobBombObj, true);
 		Play::UpdateGameObject(bobBombObj);
 		Play::DrawObject(bobBombObj);
@@ -852,6 +834,7 @@ void UpdateBobBombs()
 	{
 		GameObject& explosionObj = Play::GetGameObject(explosionID);
 
+		//if player colliedes with explosion then move to state damage
 		if (gameState.playerState == PlayerState::playerNotDebuffed || gameState.playerState == PlayerState::playerDebuffed) 
 		{
 			if (Play::IsColliding(explosionObj, playerObj)) 
@@ -881,10 +864,13 @@ void UpdateMagiKoopa()
 	for (int magiKoopaID: vMagiKoopa) 
 	{
 		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+		//Angle from player to magikoopa
 		float playerToMagiAng = atan2f(magiKoopaObj.pos.y - playerObj.pos.y, magiKoopaObj.pos.x - playerObj.pos.x);
+		//going down variable used to set object to previous velocity when velocity = 0,0
 		bool wasGoingDown = false;
 		bool isHammerColliding = false;
 
+		//set right sprite based on velocity
 		if (magiKoopaObj.velocity.y < 0)
 		{
 			Play::SetSprite(magiKoopaObj, "magikoopa_n_8", 0.25f);
@@ -897,20 +883,25 @@ void UpdateMagiKoopa()
 			wasGoingDown = true;
 		}
 
+		//if angle between player is between positive 5 degrees and negative 5 degrees and there is only 1 projectile on screen
 		if (playerObj.pos.x < magiKoopaObj.pos.x && IsInBetween(0.087f ,-0.087f,playerToMagiAng) && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
 		{
 			magiKoopaObj.velocity = {0,0};
 			Play::SetSprite(magiKoopaObj, "magikoopabattle_w_12", 0.25f);
+
+			//if animation is in frame 3 spawn projectile
 			if (magiKoopaObj.frame == 3) 
 			{
 				int projectileID = Play::CreateGameObject(typeMagiKoopaProj, {magiKoopaObj.pos.x -2, magiKoopaObj.pos.y}, 10, "peachvoice_proj_8");
 				GameObject& projectileObj = Play::GetGameObject(projectileID);
 
+				//setting projectile to right scale or orientation so it moves to the left
 				projectileObj.scale = 0.7;
 				projectileObj.rotation = (3 * PLAY_PI) / 2;
 				projectileObj.animSpeed = 0.25f;
 				projectileObj.velocity = { -2, 0 };
 
+				//set magikoopa velocity back to previous velocity
 				if (wasGoingDown)
 				{
 					magiKoopaObj.velocity.y = 2;
@@ -921,20 +912,25 @@ void UpdateMagiKoopa()
 				}
 			} 
 		}
+		//if angle between player is between positive 175 degrees and negative 1755 degrees and there is only 1 projectile on screen
 		else if (playerObj.pos.x > magiKoopaObj.pos.x && IsInBetween(3.054f, -3.054f, playerToMagiAng) && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
 		{
 			magiKoopaObj.velocity = { 0,0 };
 			Play::SetSprite(magiKoopaObj, "magikoopabattle_e_12", 0.25f);
+
+			//if animation is in frame 3 spawn projectile
 			if (magiKoopaObj.frame == 3)
 			{
 				int projectileID = Play::CreateGameObject(typeMagiKoopaProj, { magiKoopaObj.pos.x + 2, magiKoopaObj.pos.y }, 10, "peachvoice_proj_8");
 				GameObject& projectileObj = Play::GetGameObject(projectileID);
 
+				//setting projectile to right scale or orientation so it moves to the right
 				projectileObj.scale = 0.7;
 				projectileObj.rotation = PLAY_PI / 2;
 				projectileObj.animSpeed = 0.25f;
 				projectileObj.velocity = { 2, 0 };
 
+				//set magikoopa velocity back to previous velocity
 				if (wasGoingDown)
 				{
 					magiKoopaObj.velocity.y = 2;
@@ -945,8 +941,8 @@ void UpdateMagiKoopa()
 				}
 			}
 		}
-		//Hammer Collision
 
+		//if player is in attack state and hammer and magikoopa is colliding set ishammercolliding to true so we can destroy magikoopa later
 		if (gameState.playerState == PlayerState::playerAttack && Play::IsColliding(magiKoopaObj, hammerObj)) 
 		{
 			isHammerColliding = true;
@@ -963,6 +959,7 @@ void UpdateMagiKoopa()
 		Play::DrawObjectRotated(magiKoopaObj);
 	}
 
+	//Updating projectile
 	std::vector<int> vProjectiles = Play::CollectGameObjectIDsByType(typeMagiKoopaProj);
 
 	for (int mProjectileID : vProjectiles) 
@@ -970,18 +967,22 @@ void UpdateMagiKoopa()
 		bool hasCollided = false;
 		GameObject& mProjectileObj = Play::GetGameObject(mProjectileID);
 		
+		//if player collides with projectile and player is notdebuffed then move to transform state
 		if (Play::IsColliding(mProjectileObj, playerObj) && playerisDebuffed == false) 
 		{
 			hasCollided = true;
 			playerisDebuffed = true;
 	        gameState.playerState = PlayerState::playerTransform;
 		}
+
+		//if player collides with projectile and player is debuffed then move to damage state
 		else if (Play::IsColliding(mProjectileObj, playerObj) && playerisDebuffed)
 		{
 			hasCollided = true;
 			gameState.playerState = PlayerState::playerDamaged;
 		}
 
+		//delete object if projectile is off screen or hascollided with player
 		if (!Play::IsVisible(mProjectileObj) || hasCollided) 
 		{
 			mProjectileObj.type = typeDestroyed;
@@ -996,6 +997,8 @@ void UpdateMagiKoopa()
 //Used to draws spikes
 void UpdateSpikes() 
 {
+	//Only used for drawing bottom spikes on the bottom of the screen
+	//so player can walk 'behind' it
 	GameObject& spikeObj = Play::GetGameObjectByType(typeSpikes);
 	Play::UpdateGameObject(spikeObj);
 	Play::DrawObject(spikeObj);
@@ -1009,16 +1012,18 @@ void UpdateDestroyed()
 
 	for (int desID : vDestroyed)
 	{
+		//Idealy used for objects where animation only has 1 frame --> so it gives flashing effect before deleting
+		//but set anim speed to 0.2f
 		GameObject& desObj = Play::GetGameObject(desID);
 		desObj.animSpeed = 0.2f;
 		Play::UpdateGameObject(desObj);
 
-		if (desObj.frame % 2)
+		if (desObj.frame % 2 == 0)
 		{
 			Play::DrawObjectRotated(desObj, (10 - desObj.frame) / 10.0f);
 		}
 
-		if (!Play::IsVisible(desObj) || desObj.frame >= 8)
+		if (!Play::IsVisible(desObj) || desObj.frame >= 10)
 		{
 			Play::DestroyGameObject(desID);
 		}
@@ -1035,6 +1040,7 @@ void UpdateUI()
 //Used to update time passed
 void UpdateTime() 
 {
+	//if framesPassed is divisible by 60 then a second has passed so add 1 to seconds
 	if (gameState.framesPassed % 60 == 0 ) 
 	{
 		seconds++;
@@ -1049,6 +1055,8 @@ void HandleNotDebuffedControls()
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 
+	//User controls
+	//based on key pressed set correct velocity and update playerOrientation so we can use the right sprite
 	if (Play::KeyDown(VK_UP)) 
 	{
 		playerObj.velocity = { 0,-2.5f };
@@ -1073,6 +1081,8 @@ void HandleNotDebuffedControls()
 		Play::SetSprite(playerObj, "mario_walk_w_12", 0.25f);
 		playerOrientation = vOrientations.at(3);
 	}
+
+	// set velocity to 0,0 and mvoe to state attack
 	else if (Play::KeyDown(VK_SPACE))
 	{
 		playerObj.velocity = { 0,0 };
@@ -1080,6 +1090,7 @@ void HandleNotDebuffedControls()
 	}
 	else 
 	{
+		//Decelerate object and if velocity is certain value play relevant idle animations 
 		DecelerateObject(playerObj, 0.2f);
 		if (playerObj.velocity == Point2f{ 0,0 })
 		{
@@ -1108,6 +1119,8 @@ void HandleDebuffedControls()
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 
+	//User controls
+	//based on key pressed set correct velocity and update playerOrientation so we can use the right sprite
 	if (gameState.playerState != PlayerState::playerDead)
 	{
 		if (Play::KeyDown(VK_UP))
@@ -1136,6 +1149,7 @@ void HandleDebuffedControls()
 		}
 		else
 		{
+			//Decelerate object and if velocity is certain value play relevant idle animations 
 			DecelerateObject(playerObj, 0.2f);
 			if (playerObj.velocity == Point2f{ 0,0 })
 			{
@@ -1166,6 +1180,8 @@ void HandleHammerAnimations()
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
 
+	//Based on value of playerOrientation play right hammer and player attack animation
+	//once animation is finished them move to notdebuffed state
 	if (playerOrientation == vOrientations.at(0))
 	{
 		Play::SetSprite(playerObj, "mario_hammer_n_3", 0.15f);
@@ -1214,7 +1230,7 @@ void HandleHammerAnimations()
 //Used to spawn enemies in initial stage
 void SpawnEnemies() 
 {
-	//Goombas
+	//Spawn/Create 2 goomba gameobjects
 	for (int i = 0; i < 2; i++) 
 	{
 		int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(), 10, "goomba_walk_e_8");
@@ -1222,7 +1238,7 @@ void SpawnEnemies()
 		SetVelocity(goombaObj, "x");
 	}
 
-	//BobBomb
+	//Spawn/Create 2 bobBomb gameobjects
 	for (int i = 0; i < 2; i++) 
 	{
 		int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(), 10, "bobbomb_walk_e_8");
@@ -1230,7 +1246,7 @@ void SpawnEnemies()
 		SetVelocity(bobBombObj, "x");
 	}
 
-	//Magi Koopa and DryBones
+	//Spawn/Create 1 drybones or magikoopa enemy based on the chance variable
 	int chance = PickBetween(1, -1);
 
 	if (chance == 1) 
@@ -1251,18 +1267,23 @@ void SpawnEnemies()
 //used to spawn player consumables
 void SpawnPlayerConsumables() 
 {
-	if (gameState.playerHP <= 3 && Play::CollectGameObjectIDsByType(typeGoldenMushroom).size() < 1)
+	//if player health is not 0 and there isnt a golden mushroom on screen then spawn a golden mushroom
+	if (gameState.playerHP != 0 && Play::CollectGameObjectIDsByType(typeGoldenMushroom).size() < 1)
 	{
 		int goldenMushroomID = Play::CreateGameObject(typeGoldenMushroom, GetRandomPositionInPS(), 20, "invincible_powerup");
 		GameObject& goldenMushroomObj = Play::GetGameObject(goldenMushroomID);
 		SetVelocity(goldenMushroomObj, "both");
 	}
+
+	//if player health is less than 3 (so less than max health) and there isnt 2 health pickups on screen then spawn a healthup
 	else if (gameState.playerHP < 3 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 2)
 	{
 		int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(), 20, "health_up");
 		GameObject& healthUpObj = Play::GetGameObject(healthUpID);
 		SetVelocity(healthUpObj, "both");
 	}
+
+	//if player is debuffed and there isnt a refreshing herb already on screen then spawn refreshing herb
 	else if (gameState.playerState == PlayerState::playerDebuffed && Play::CollectGameObjectIDsByType(typeRefreshingHerb).size() < 1)
 	{
 		int refreshingHerbID = Play::CreateGameObject(typeRefreshingHerb, GetRandomPositionInPS(), 20, "refreshing_herb");
@@ -1281,6 +1302,7 @@ void ScreenBouncing(GameObject& gameObj, bool choice)
 {
 	if (choice == true) 
 	{
+		//If player is leaving play space horizontally then set old poss current pos
 		if (gameObj.type == typePlayer) 
 		{
 			if (gameObj.pos.x < 0)
@@ -1292,6 +1314,7 @@ void ScreenBouncing(GameObject& gameObj, bool choice)
 				gameObj.pos = gameObj.oldPos;
 			}
 
+			//If player is leaving play space vertically then set old poss current pos
 			if (gameObj.pos.y > 605)
 			{
 				gameObj.pos = gameObj.oldPos;
@@ -1303,6 +1326,8 @@ void ScreenBouncing(GameObject& gameObj, bool choice)
 		}
 		else 
 		{
+			//else for everyother gameobject type 
+			//If object is leaving play space horizontally then set velocity.x to -1 of what it is
 			if (gameObj.pos.x < 0)
 			{
 				gameObj.velocity.x *= -1;
@@ -1312,6 +1337,7 @@ void ScreenBouncing(GameObject& gameObj, bool choice)
 				gameObj.velocity.x *= -1;
 			}
 
+			//If object is leaving play space vertically then set velocity.y to -1 of what it is
 			if (gameObj.pos.y > 605)
 			{
 				gameObj.velocity.y *= -1;
@@ -1327,14 +1353,19 @@ void ScreenBouncing(GameObject& gameObj, bool choice)
 //Used to set an objects velocity to soley x, y or a combination of the two
 void SetVelocity(GameObject& gameObj, std::string choice) 
 {
+	//Will set gameobject velocity.x to either -1 or 1  --> only moving horizontally
 	if (choice == "x")
 	{
 		gameObj.velocity = Point2f(PickBetween(1,-1)* 2 , 0);
 	}
+
+	//Will set gameobject velocity.y to either -1 or 1 --> only moving vertically
 	else if (choice == "y")
 	{
 		gameObj.velocity = Point2f(0, PickBetween(1, -1) * 2);
 	}
+
+	//Will set gameobject velocity.x and y to either -1 or 1 --> moving diagonally
 	else if (choice == "both")
 	{
 		gameObj.velocity = Point2f(PickBetween(1, -1) * 2, PickBetween(1, -1) * 2);
@@ -1344,14 +1375,66 @@ void SetVelocity(GameObject& gameObj, std::string choice)
 //Used to get a point2f value that is the play space of the relevant stage
 Point2f GetRandomPositionInPS() 
 {
+	//returns a random position in the play space
 	return Point2f(Play::RandomRollRange(0, displayWidth) , Play::RandomRollRange(395, 605));
 }
 
 //Used to decelerate game objects
 void DecelerateObject(GameObject& gameObj, float rate) 
 {
+	//Will decelerate object based on the rate
 	gameObj.velocity *= rate;
 	gameObj.acceleration = {0,0};
+}
+
+//Used to clear/destroy all the enemies and effects on screen
+void ClearEnemiesOnScreen() 
+{
+	//Loop through enemy vectors and delete gameobjects
+	for (int goombaID : Play::CollectGameObjectIDsByType(typeGoomba))
+	{
+		Play::GetGameObject(goombaID).type = typeDestroyed;
+	}
+
+	for (int bombaAID : Play::CollectGameObjectIDsByType(typeBobBombAlight))
+	{
+		Play::GetGameObject(bombaAID).type = typeDestroyed;
+	}
+
+	for (int bombaNAID : Play::CollectGameObjectIDsByType(typeBobBombNotAlight))
+	{
+		Play::GetGameObject(bombaNAID).type = typeDestroyed;
+	}
+
+	for (int bombaEx : Play::CollectGameObjectIDsByType(typeBobBombExplosion))
+	{
+		Play::GetGameObject(bombaEx).type = typeDestroyed;
+	}
+
+	for (int dryBonesID : Play::CollectGameObjectIDsByType(typeDryBones))
+	{
+		Play::GetGameObject(dryBonesID).type = typeDestroyed;
+	}
+
+	for (int dryBonesHeadID : Play::CollectGameObjectIDsByType(typeDryBoneHead))
+	{
+		Play::GetGameObject(dryBonesHeadID).type = typeDestroyed;
+	}
+
+	for (int dryBonesBodyID : Play::CollectGameObjectIDsByType(typeDryBoneBody))
+	{
+		Play::GetGameObject(dryBonesBodyID).type = typeDestroyed;
+	}
+
+	for (int magiKoopaID : Play::CollectGameObjectIDsByType(typeMagiKoopa))
+	{
+		Play::GetGameObject(magiKoopaID).type = typeDestroyed;
+	}
+
+	for (int magiKoopaProjID : Play::CollectGameObjectIDsByType(typeMagiKoopaProj))
+	{
+		Play::GetGameObject(magiKoopaProjID).type = typeDestroyed;
+	}
 }
 
 //			UI RELATED:
@@ -1367,6 +1450,7 @@ void CreateUI()
 //Used to pick between two numbers
 int PickBetween(int num1, int num2) 
 {
+	//Will pick between two numbers based on chance
 	float chance = Play::RandomRollRange(0, 50);
 
 	if (chance < 25) 
