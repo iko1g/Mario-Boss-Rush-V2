@@ -30,6 +30,7 @@ enum BossState
 	bossDamaged,
 	bossSummonMob,
 	bossDead,
+	bossWin,
 };
 
 enum GameObjectType
@@ -69,6 +70,7 @@ struct GameState
 	std::string playerOrientation{};
 	bool playerisDebuffed = false;
 	bool debugging = false;
+	bool isBossAtkLngRng = false;
 	PlayerState playerState = PlayerState::playerAppear;
 	BossState bossState = BossState::bossAppear;
 };
@@ -152,6 +154,7 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
 	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35");
 	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
+	int bowserID = Play::CreateGameObject(typeBowser, { displayWidth + 75 , 500 }, 33, "bowser_walk_w_12");
 	CreateUI();
 	//SpawnEnemies();
 }
@@ -200,6 +203,7 @@ void UpdatePlayerState()
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
+	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
 
 	switch (gameState.playerState)
 	{
@@ -316,8 +320,8 @@ void UpdatePlayerState()
 	{
 		playerObj.velocity = { 0,0 };
 		Play::SetSprite(playerObj, "mario_shock_6", 0.25f);
-
-		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO CONTINUE", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "YOU LOSE", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
 
 		if (Play::KeyPressed(VK_RETURN) == true) 
 		{
@@ -330,12 +334,15 @@ void UpdatePlayerState()
 			gameState.playerOrientation = "";
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
+			gameState.isBossAtkLngRng = false;
 			
 			//start audio loop
 
 			//Delete all enemies and move boss to off screen
 			ClearEnemiesOnScreen();
 
+			playerObj.pos = { -50 ,500 };
+			bowserObj.pos = { displayWidth + 75 , 500 };
 			gameState.playerState = PlayerState::playerAppear;
 			gameState.bossState = BossState::bossAppear;
 		}
@@ -513,50 +520,176 @@ void UpdateHammer()
 void UpdateBossState() 
 {
 	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
-	bool longRangedAtk = false;
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	GameObject& playerObj = Play::GetGameObjectByType(typeHammer);
 
 	switch (gameState.bossState) 
 	{
 	case BossState::bossAppear:
 	{
+		if (gameState.score == 15 || gameState.seconds == 45) 
+		{
+			ClearEnemiesOnScreen();
+			Play::SetSprite(bowserObj, "bowser_walk_w_12", 0.25f);
+			bowserObj.velocity = { -2.5f,0 };
+
+			if (bowserObj.pos.x < displayWidth - 100) 
+			{
+				gameState.bossState = BossState::bossIdle;
+			}
+		}
 		//boss will walk from right
 		//once they reach certain x amount move to idle
 	}
 	break;
 	case BossState::bossIdle:
 	{
-		//play Idle animation for 4 seconds
-		//if player is long ranged  set long range to true then move to boss agro
-		//if player is close ranged set long range to false then move to boss agro
-		//if enemy lists are empty then move to boss summon mob 
+		Play::SetSprite(bowserObj, "bowser_idle_27", 0.25f);
+		float distanceFromplayer = FindDistance(bowserObj, playerObj);
+
+		if (gameState.seconds % 4 == 0) 
+		{
+			//if list of enemies is empty move to spawn mob state
+			if (Play::CollectGameObjectIDsByType(typeGoomba).size() + Play::CollectGameObjectIDsByType(typeBobBombNotAlight).size() + Play::CollectGameObjectIDsByType(typeDryBones).size() + Play::CollectGameObjectIDsByType(typeMagiKoopa).size() == 0)
+			{
+				gameState.bossState = BossState::bossSummonMob;
+			}
+
+			//if distance from player is < 200 then set isBossAtkLngRng to false and move to state boss agro
+			else if (distanceFromplayer < 200)
+			{
+				gameState.isBossAtkLngRng = false;
+				gameState.bossState = BossState::bossAgro;
+			}
+			//if distance from player is > 200 then set isBossAtkLngRng to true and move to state boss agro
+			else if (distanceFromplayer > 200)
+			{
+				gameState.isBossAtkLngRng = true;
+				gameState.bossState = BossState::bossAgro;
+			}
+		}
 	}
 	break;
 	case BossState::bossAgro:
 	{
+		//Play attack animation
+		Play::SetSprite(bowserObj, "bowser_attack_42", 0.25f);
 
+		if (gameState.isBossAtkLngRng)
+		{
+			//do long range attack
+			gameState.bossState = BossState::bossIdle;
+		}
+		else 
+		{
+			//do short range attack
+			gameState.bossState = BossState::bossIdle;
+		}
 	}
 	break;
 	case BossState::bossDamaged:
 	{
-		//-- from bossHp and play damage anim
-		//if bosshp -- is 0 then move to bossDead
-		//if damage anim is finished then move to state idle
+		//playing damage sprite
+		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
+
+		//If bosshp -- = 0 then move boss state to bossDead
+		//and decrement boss hp
+		if (gameState.bossHp-- == 0)
+		{
+			gameState.bossHp--;
+			gameState.bossState = BossState::bossDead;
+		}
+		else 
+		{
+			//else decrement bosshp and move boss state to bossIdle 
+			gameState.bossHp--;
+			gameState.bossState = BossState::bossIdle;
+		}
 	}
 	break;
 	case BossState::bossSummonMob:
 	{
-		//play summon mob anim
-		//use spawnenemies function 
-		//if enemy list .size = 6 then move to idle
+		//Play attack animation
+		Play::SetSprite(bowserObj, "bowser_attack_42", 0.25f);
+
+		//if animation reaches frame 20 spawn enemies and move back to state idle 
+		if (bowserObj.frame == 19) 
+		{
+			//Spawn mobs
+			//SpawnEnemies();
+			//gameState.bossState = BossState::bossIdle;
+		}
 	}
 	break;
 	case BossState::bossDead:
 	{
-		//play death animation
-		//delete boss object
+		//play damage sprite
+		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
+		Play::DrawFontText("SuperMario25636px_10x10", "YOU WIN", { displayWidth / 2 , displayHeight / 2}, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30}, Play::CENTRE);
+
+		//Reset game elements
+		if (Play::KeyPressed(VK_RETURN) == true)
+		{
+			gameState.bossHp = 4;
+			gameState.playerHP = 3;
+			gameState.score = 0;
+			gameState.framesPassed = 0;
+			gameState.seconds = 0;
+			gameState.stateCounter = 0;
+			gameState.playerOrientation = "";
+			gameState.playerisDebuffed = false;
+			gameState.debugging = false;
+			gameState.isBossAtkLngRng = false;
+
+			//start audio loop
+
+			//Delete all enemies and move boss to off screen
+			ClearEnemiesOnScreen();
+			playerObj.pos = { -50 ,500 };
+			bowserObj.pos = { displayWidth + 75 , 500 };
+
+			gameState.playerState = PlayerState::playerAppear;
+			gameState.bossState = BossState::bossAppear;
+		}
+	}
+	break;
+	case BossState::bossWin:
+	{
+		Play::SetSprite(bowserObj, "bowser_win_16", 0.25f);
+		Play::DrawFontText("SuperMario25636px_10x10", "YOU LOSE", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
+
+		//Reset Game elements
+		if (Play::KeyPressed(VK_RETURN) == true)
+		{
+			gameState.bossHp = 4;
+			gameState.playerHP = 3;
+			gameState.score = 0;
+			gameState.framesPassed = 0;
+			gameState.seconds = 0;
+			gameState.stateCounter = 0;
+			gameState.playerOrientation = "";
+			gameState.playerisDebuffed = false;
+			gameState.debugging = false;
+			gameState.isBossAtkLngRng = false;
+
+			//start audio loop
+
+			//Delete all enemies and move boss to off screen
+			ClearEnemiesOnScreen();
+
+			playerObj.pos = {-50 ,500};
+			bowserObj.pos = {displayWidth + 75 , 500};
+			gameState.playerState = PlayerState::playerAppear;
+			gameState.bossState = BossState::bossAppear;
+		}
 	}
 	break;
 	}
+
+	Play::UpdateGameObject(bowserObj);
+	Play::DrawObject(bowserObj);
 	//c+v screenbouncing function from player update 
 	//update object
 	//drawobject --> maybe rotated have to see how things are implemented
@@ -1095,8 +1228,6 @@ void UpdateDestroyed()
 //Used to update UI
 void UpdateUI() 
 {
-	//if player is damaged remove 1 from healthicons
-	//if healed add one to health icons
 	std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typeHealthIcon);
 
 	for (int healthIconID : vHealthIcons) 
