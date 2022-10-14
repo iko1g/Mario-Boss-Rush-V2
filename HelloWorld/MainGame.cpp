@@ -6,12 +6,8 @@
 const int displayWidth = 1280;
 const int displayHeight = 720;
 const int displayScale = 1;
-int seconds = 0;
 
 const std::vector<std::string> vOrientations = { "N", "E", "S", "W" };
-std::string playerOrientation{};
-bool playerisDebuffed = false;
-bool debugging = false;
 
 enum PlayerState 
 {
@@ -68,6 +64,10 @@ struct GameState
 	int playerHP = 3;
 	int score = 0;
 	int framesPassed = 0;
+	int seconds = 0;
+	std::string playerOrientation{};
+	bool playerisDebuffed = false;
+	bool debugging = false;
 	PlayerState playerState = PlayerState::playerNotDebuffed;
 	BossState bossState = BossState::bossAppear;
 };
@@ -161,7 +161,7 @@ bool MainGameUpdate( float elapsedTime )
 	gameState.framesPassed ++;
 	Play::DrawBackground();
 	Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), {displayWidth /2 , 25 }, Play::CENTRE);
-	Play::DrawFontText("SuperMario25636px_10x10", "HEALTH " + std::to_string(gameState.playerHP), { displayWidth /2 , displayHeight - 25 }, Play::CENTRE);
+	Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth /2 , displayHeight - 25 }, Play::CENTRE);
 	UpdateTime();
 	UpdateDestroyed();
 	UpdateGoombas();
@@ -171,8 +171,9 @@ bool MainGameUpdate( float elapsedTime )
 	UpdatePlayerState();
 	UpdateHammer();
 	UpdateSpikes();
+	UpdateUI();
 
-	if (debugging) 
+	if (gameState.debugging) 
 	{ 
 		ShowDebugUI(); 
 	}
@@ -222,7 +223,7 @@ void UpdatePlayerState()
 	{
 		//Used to move player from debuffed to notDebuffed state 
 		//after they have collided with a magikoopa projectile or refreshing herb
-		if (playerisDebuffed) 
+		if (gameState.playerisDebuffed)
 		{
 			Play::SetSprite(playerObj, "mario_normaltofat_22", 0.35f);
 			if (Play::IsAnimationComplete(playerObj)) 
@@ -230,7 +231,7 @@ void UpdatePlayerState()
 				gameState.playerState = PlayerState::playerDebuffed;
 			}
 		}
-		else if (playerisDebuffed == false)
+		else if (gameState.playerisDebuffed == false)
 		{
 			Play::SetSprite(playerObj, "mario_fattonormal_18", 0.25f);
 			if (Play::IsAnimationComplete(playerObj))
@@ -242,17 +243,29 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerDamaged:
 	{
+		std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typeHealthIcon);
+
 		//Minus 1 player health and move to relevant move state
 		if (gameState.playerHP - 1 == 0)
 		{
+
 			gameState.playerHP--;
+
+			//Destory first object in list as they will have 1hp
+			GameObject& frontHealthIconToDelObj = Play::GetGameObject(vHealthIcons.front());
+			frontHealthIconToDelObj.type = typeDestroyed;
+
 			gameState.playerState = PlayerState::playerDead;
 		}
 		else 
 		{
 			gameState.playerHP--;
 
-			if (playerisDebuffed) 
+			//Destroy the last healthIcon in the list
+			GameObject& backHealthIconToDelObj = Play::GetGameObject(vHealthIcons.back());
+			backHealthIconToDelObj.type = typeDestroyed;
+
+			if (gameState.playerisDebuffed)
 			{
 				gameState.playerState = PlayerState::playerDebuffed;
 			}
@@ -265,10 +278,19 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerHeal:
 	{
+		std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typeHealthIcon);
 		// Plus 1 to player health and move to relevant move state
 		gameState.playerHP++;
 
-		if (playerisDebuffed)
+		//Get health icon at the back
+		GameObject& backHealthIconObj = Play::GetGameObject(vHealthIcons.back());
+		
+		//Create new health icon at an offset of the health icon at the back of the vector
+		int healthIconToAddID = Play::CreateGameObject(typeHealthIcon, {backHealthIconObj.pos.x + 45,displayHeight - 65 }, 0, "health_icon");
+		GameObject& addedHealthIconObj = Play::GetGameObject(healthIconToAddID);
+		addedHealthIconObj.scale = 1.5;
+
+		if (gameState.playerisDebuffed)
 		{
 			gameState.playerState = PlayerState::playerDebuffed;
 		}
@@ -296,6 +318,10 @@ void UpdatePlayerState()
 			gameState.playerHP = 3;
 			gameState.score = 0;
 			gameState.framesPassed = 0;
+			gameState.seconds = 0;
+			gameState.playerOrientation = "";
+			gameState.playerisDebuffed = false;
+			gameState.debugging = false;
 			
 			//start audio loop
 
@@ -404,7 +430,7 @@ void UpdateConsumables()
 			if (Play::IsColliding(refreshingHerbObj, playerObj))
 			{
 				hasCollidedRefreshingHerbs = true;
-				playerisDebuffed = false;
+				gameState.playerisDebuffed = false;
 				gameState.playerState = PlayerState::playerTransform;
 			}
 
@@ -639,7 +665,7 @@ void UpdateDryBones()
 			Play::PointGameObject(dryBoneHeadObj, 1, playerObj.pos.x, playerObj.pos.y);
 
 			//if 7 seconds have paassed and the head hasnt collided with the player then destroy the head and body
-			if (seconds % 7 == 0) 
+			if (gameState.seconds % 7 == 0) 
 			{
 				dryBoneHeadObj.type = typeDestroyed;
 
@@ -768,13 +794,13 @@ void UpdateBobBombs()
 		{
 			//if player hasnt collided with bobbomb and 3 seconds have passed
 			//set velocity to zero and set bobBomb to "sitting" sprite
-			if (seconds % 3 == 0)
+			if (gameState.seconds % 3 == 0)
 			{
 				bobBombObj.velocity = { 0,0 };
 				Play::SetSprite(bobBombObj, "bobbomb_walk_s_a_8", 0.25f);
 
 				//if 4 seconds have passed after that then then spawn explosions and delete bobBomb object 
-				if (seconds % 4 == 0) 
+				if (gameState.seconds % 4 == 0)
 				{
 					Play::DrawObjectTransparent(bobBombObj, 0);
 
@@ -968,15 +994,16 @@ void UpdateMagiKoopa()
 		GameObject& mProjectileObj = Play::GetGameObject(mProjectileID);
 		
 		//if player collides with projectile and player is notdebuffed then move to transform state
-		if (Play::IsColliding(mProjectileObj, playerObj) && playerisDebuffed == false) 
+		if (Play::IsColliding(mProjectileObj, playerObj) && gameState.playerisDebuffed == false)
 		{
 			hasCollided = true;
-			playerisDebuffed = true;
+			playerObj.velocity = { 0,0 };
+			gameState.playerisDebuffed = true;
 	        gameState.playerState = PlayerState::playerTransform;
 		}
 
 		//if player collides with projectile and player is debuffed then move to damage state
-		else if (Play::IsColliding(mProjectileObj, playerObj) && playerisDebuffed)
+		else if (Play::IsColliding(mProjectileObj, playerObj) && gameState.playerisDebuffed)
 		{
 			hasCollided = true;
 			gameState.playerState = PlayerState::playerDamaged;
@@ -1035,6 +1062,14 @@ void UpdateUI()
 {
 	//if player is damaged remove 1 from healthicons
 	//if healed add one to health icons
+	std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typeHealthIcon);
+
+	for (int healthIconID : vHealthIcons) 
+	{
+		GameObject& healthIconObj = Play::GetGameObject(healthIconID);
+		Play::UpdateGameObject(healthIconObj);
+		Play::DrawObjectRotated(healthIconObj);
+	}
 }
 
 //Used to update time passed
@@ -1043,7 +1078,7 @@ void UpdateTime()
 	//if framesPassed is divisible by 60 then a second has passed so add 1 to seconds
 	if (gameState.framesPassed % 60 == 0 ) 
 	{
-		seconds++;
+		gameState.seconds++;
 	}
 }
 
@@ -1061,25 +1096,25 @@ void HandleNotDebuffedControls()
 	{
 		playerObj.velocity = { 0,-2.5f };
 		Play::SetSprite(playerObj, "mario_walk_n_12", 0.25f);
-		playerOrientation = vOrientations.at(0);
+		gameState.playerOrientation = vOrientations.at(0);
 	}
 	else if (Play::KeyDown(VK_RIGHT)) 
 	{
 		playerObj.velocity = { 2.5f,0 };
 		Play::SetSprite(playerObj, "mario_walk_e_12", 0.25f);
-		playerOrientation = vOrientations.at(1);
+		gameState.playerOrientation = vOrientations.at(1);
 	}
 	else if (Play::KeyDown(VK_DOWN)) 
 	{
 		playerObj.velocity = { 0,2.5f };
 		Play::SetSprite(playerObj, "mario_walk_s_12", 0.25f);
-		playerOrientation = vOrientations.at(2);
+		gameState.playerOrientation = vOrientations.at(2);
 	}
 	else if (Play::KeyDown(VK_LEFT)) 
 	{
 		playerObj.velocity = { -2.5f,0 };
 		Play::SetSprite(playerObj, "mario_walk_w_12", 0.25f);
-		playerOrientation = vOrientations.at(3);
+		gameState.playerOrientation = vOrientations.at(3);
 	}
 
 	// set velocity to 0,0 and mvoe to state attack
@@ -1094,19 +1129,19 @@ void HandleNotDebuffedControls()
 		DecelerateObject(playerObj, 0.2f);
 		if (playerObj.velocity == Point2f{ 0,0 })
 		{
-			if (playerOrientation == vOrientations.at(0))
+			if (gameState.playerOrientation == vOrientations.at(0))
 			{
 				Play::SetSprite(playerObj, "mario_idle_n_35", 0.25f);
 			}
-			else if (playerOrientation == vOrientations.at(1))
+			else if (gameState.playerOrientation == vOrientations.at(1))
 			{
 				Play::SetSprite(playerObj, "mario_idle_e_35", 0.25f);
 			}
-			else if (playerOrientation == vOrientations.at(2))
+			else if (gameState.playerOrientation == vOrientations.at(2))
 			{
 				Play::SetSprite(playerObj, "mario_idle_s_35", 0.25f);
 			}
-			else if (playerOrientation == vOrientations.at(3))
+			else if (gameState.playerOrientation == vOrientations.at(3))
 			{
 				Play::SetSprite(playerObj, "mario_idle_w_35", 0.25f);
 			}
@@ -1127,25 +1162,25 @@ void HandleDebuffedControls()
 		{
 			playerObj.velocity = { 0,-1.5f };
 			Play::SetSprite(playerObj, "mario_fat_walk_n_14", 0.25f);
-			playerOrientation = vOrientations.at(0);
+			gameState.playerOrientation = vOrientations.at(0);
 		}
 		else if (Play::KeyDown(VK_RIGHT))
 		{
 			playerObj.velocity = { 1.5f,0 };
 			Play::SetSprite(playerObj, "mario_fat_walk_e_14", 0.25f);
-			playerOrientation = vOrientations.at(1);
+			gameState.playerOrientation = vOrientations.at(1);
 		}
 		else if (Play::KeyDown(VK_DOWN))
 		{
 			playerObj.velocity = { 0,1.5f };
 			Play::SetSprite(playerObj, "mario_fat_walk_s_14", 0.25f);
-			playerOrientation = vOrientations.at(2);
+			gameState.playerOrientation = vOrientations.at(2);
 		}
 		else if (Play::KeyDown(VK_LEFT))
 		{
 			playerObj.velocity = { -1.5f,0 };
 			Play::SetSprite(playerObj, "mario_fat_walk_w_14", 0.25f);
-			playerOrientation = vOrientations.at(3);
+			gameState.playerOrientation = vOrientations.at(3);
 		}
 		else
 		{
@@ -1153,19 +1188,19 @@ void HandleDebuffedControls()
 			DecelerateObject(playerObj, 0.2f);
 			if (playerObj.velocity == Point2f{ 0,0 })
 			{
-				if (playerOrientation == vOrientations.at(0))
+				if (gameState.playerOrientation == vOrientations.at(0))
 				{
 					Play::SetSprite(playerObj, "mario_fat_idle_n_45", 0.25f);
 				}
-				else if (playerOrientation == vOrientations.at(1))
+				else if (gameState.playerOrientation == vOrientations.at(1))
 				{
 					Play::SetSprite(playerObj, "mario_fat_idle_e_45", 0.25f);
 				}
-				else if (playerOrientation == vOrientations.at(2))
+				else if (gameState.playerOrientation == vOrientations.at(2))
 				{
 					Play::SetSprite(playerObj, "mario_fat_idle_s_45", 0.25f);
 				}
-				else if (playerOrientation == vOrientations.at(3))
+				else if (gameState.playerOrientation == vOrientations.at(3))
 				{
 					Play::SetSprite(playerObj, "mario_fat_idle_w_45", 0.25f);
 				}
@@ -1182,7 +1217,7 @@ void HandleHammerAnimations()
 
 	//Based on value of playerOrientation play right hammer and player attack animation
 	//once animation is finished them move to notdebuffed state
-	if (playerOrientation == vOrientations.at(0))
+	if (gameState.playerOrientation == vOrientations.at(0))
 	{
 		Play::SetSprite(playerObj, "mario_hammer_n_3", 0.15f);
 		Play::SetSprite(hammerObj, "ham_mario_n_3", 0.10f);
@@ -1192,7 +1227,7 @@ void HandleHammerAnimations()
 			gameState.playerState = PlayerState::playerNotDebuffed;
 		}
 	}
-	else if (playerOrientation == vOrientations.at(1))
+	else if (gameState.playerOrientation == vOrientations.at(1))
 	{
 		Play::SetSprite(playerObj, "mario_hammer_e_3", 0.15f);
 		Play::SetSprite(hammerObj, "ham_mario_w_3", 0.10f);
@@ -1202,7 +1237,7 @@ void HandleHammerAnimations()
 			gameState.playerState = PlayerState::playerNotDebuffed;
 		}
 	}
-	else if (playerOrientation == vOrientations.at(2))
+	else if (gameState.playerOrientation == vOrientations.at(2))
 	{
 		Play::SetSprite(playerObj, "mario_hammer_s_3", 0.15f);
 		Play::SetSprite(hammerObj, "ham_mario_s_3", 0.10f);
@@ -1212,7 +1247,7 @@ void HandleHammerAnimations()
 			gameState.playerState = PlayerState::playerNotDebuffed;
 		}
 	}
-	else if (playerOrientation == vOrientations.at(3))
+	else if (gameState.playerOrientation == vOrientations.at(3))
 	{
 		Play::SetSprite(playerObj, "mario_hammer_w_3", 0.15f);
 		Play::SetSprite(hammerObj, "ham_mario_e_3", 0.10f);
@@ -1442,7 +1477,17 @@ void ClearEnemiesOnScreen()
 //Used to draw UI
 void CreateUI() 
 {
-	//Draw health Mushrooms
+	//Create 3 health icon gameObjects 
+	int healthIcon1ID = Play::CreateGameObject(typeHealthIcon, { displayWidth / 2 - 45, displayHeight - 65 }, 0, "health_icon");
+	int healthIcon2ID = Play::CreateGameObject(typeHealthIcon, { displayWidth / 2, displayHeight - 65 }, 0, "health_icon");
+	int healthIcon3ID = Play::CreateGameObject(typeHealthIcon, { displayWidth / 2 + 45, displayHeight - 65 }, 0, "health_icon");
+
+	GameObject& healthIcon1Obj = Play::GetGameObject(healthIcon1ID);
+	GameObject& healthIcon2Obj = Play::GetGameObject(healthIcon2ID);
+	GameObject& healthIcon3Obj = Play::GetGameObject(healthIcon3ID);
+
+	healthIcon1Obj.scale = healthIcon2Obj.scale = healthIcon3Obj.scale = 1.5;
+
 }
 
 //          MISCELLANEOUS:
@@ -1606,6 +1651,6 @@ void ShowDebugUI()
 	std::string framesPasseddString = std::to_string(gameState.framesPassed);
 	Play::DrawDebugText({80 , 45}, framesPasseddString.c_str(), Play::cGreen);
 	//seconds
-	std::string timePassedString = std::to_string(seconds);
+	std::string timePassedString = std::to_string(gameState.seconds);
 	Play::DrawDebugText({ 80 , 65 }, timePassedString.c_str(), Play::cGreen);
 }
