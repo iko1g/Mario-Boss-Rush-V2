@@ -64,11 +64,12 @@ struct GameState
 	int playerHP = 3;
 	int score = 0;
 	int framesPassed = 0;
-	int seconds = 0;
+	int seconds = 0; 
+	int stateCounter = 0;
 	std::string playerOrientation{};
 	bool playerisDebuffed = false;
 	bool debugging = false;
-	PlayerState playerState = PlayerState::playerNotDebuffed;
+	PlayerState playerState = PlayerState::playerAppear;
 	BossState bossState = BossState::bossAppear;
 };
 
@@ -149,10 +150,10 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	Play::CentreAllSpriteOrigins();
 	Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
 	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
-	Play::CreateGameObject(typePlayer, { displayWidth / 2, 505 }, 15, "mario_idle_s_35");
+	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35");
 	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
 	CreateUI();
-	SpawnEnemies();
+	//SpawnEnemies();
 }
 
 // Called by PlayBuffer every frame (60 times a second!)
@@ -204,9 +205,15 @@ void UpdatePlayerState()
 	{
 	case PlayerState::playerAppear:
 	{
-		//Play walks from left when x is certain value statenotdebuffed
-		//or maybe just in case if enemy is spawned on player 
-		//move to playerpowerup
+		Play::SetSprite(playerObj, "mario_walk_e_12", 0.25f);
+		playerObj.velocity = {2.5f,0};
+
+		if (playerObj.pos.x > 100) 
+		{
+			playerObj.velocity = { 0,0 };
+			gameState.playerOrientation = vOrientations.at(1);
+			gameState.playerState = PlayerState::playerPowerUp;
+		}
 	}
 	break;
 	case PlayerState::playerNotDebuffed:
@@ -251,7 +258,7 @@ void UpdatePlayerState()
 
 			gameState.playerHP--;
 
-			//Destory first object in list as they will have 1hp
+			//Destory first object in list as they will have 1hp so there should only be 1 health icon
 			GameObject& frontHealthIconToDelObj = Play::GetGameObject(vHealthIcons.front());
 			frontHealthIconToDelObj.type = typeDestroyed;
 
@@ -319,6 +326,7 @@ void UpdatePlayerState()
 			gameState.score = 0;
 			gameState.framesPassed = 0;
 			gameState.seconds = 0;
+			gameState.stateCounter = 0;
 			gameState.playerOrientation = "";
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
@@ -335,12 +343,45 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerPowerUp:
 	{
-		//player will be in this state for 5 seconds and will be invincible
-		//have counter variable
-		//keep adding to counter while in state
-		//if counter % 4 = 0 colour player sprite yellow
-		//else colour it white (clear colouring)
-		//if 5 seconds have passed move to relevant debuff or nondebuff state
+		gameState.stateCounter++;
+
+		//Give player flashing yellow effect
+		if (gameState.stateCounter % 5 == 0) 
+		{
+			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId),Play::cYellow);
+		}
+		else 
+		{
+			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId), Play::cWhite);
+		}
+
+		//Handle player movement while in this state
+		if (gameState.playerisDebuffed) 
+		{
+			HandleDebuffedControls();
+		}
+		else 
+		{
+			HandleNotDebuffedControls();
+		}
+
+		//if seven 5 seconds have passed then clear colouring
+		//rest counter and move player state to relevant state
+		if (gameState.seconds % 4 == 0) 
+		{
+			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId), Play::cWhite);
+			gameState.stateCounter = 0;
+
+			if (gameState.playerisDebuffed)
+			{
+				gameState.playerState = PlayerState::playerDebuffed;
+			}
+			else
+			{
+				gameState.playerState = PlayerState::playerNotDebuffed;
+			}
+		}
+
 	}
 	break;
 	}
@@ -654,7 +695,7 @@ void UpdateDryBones()
 		bool hammerHasCollided = false;
 
 		//if player collides with head then move state to player Damaged
-		if (Play::IsColliding(dryBoneHeadObj, playerObj)) 
+		if (Play::IsColliding(dryBoneHeadObj, playerObj) && (gameState.playerState == PlayerState::playerDebuffed || gameState.playerState == PlayerState::playerNotDebuffed))
 		{
 			userHasCollided = true;
 			gameState.playerState = PlayerState::playerDamaged;
@@ -764,11 +805,11 @@ void UpdateBobBombs()
 		bool isHammerColliding = false;
 
 		//If player has collided with bobBomb then spawn explosions and delete bobBomb object 
-		if (Play::IsColliding(bobBombObj, playerObj)) 
+		if (Play::IsColliding(bobBombObj, playerObj) && (gameState.playerState == PlayerState::playerDebuffed || gameState.playerState == PlayerState::playerNotDebuffed))
 		{
-			Play::DrawObjectTransparent(bobBombObj, 0);
 			bobBombObj.velocity = { 0,0 };
-
+			Play::DrawObjectTransparent(bobBombObj, 0);
+		
 			int explosion1ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x + 5 , bobBombObj.pos.y }, 15, "explosion_12");
 			int explosion2ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x  , bobBombObj.pos.y }, 15, "explosion_12");
 			int explosion3ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x - 5 , bobBombObj.pos.y }, 15, "explosion_12");
@@ -788,43 +829,37 @@ void UpdateBobBombs()
 			explosion1Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
 			explosion2Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
 			explosion3Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
-			Play::DestroyGameObject(bobBombID);
+			bobBombObj.type = typeDestroyed;
 		}
 		else 
 		{
-			//if player hasnt collided with bobbomb and 3 seconds have passed
-			//set velocity to zero and set bobBomb to "sitting" sprite
-			if (gameState.seconds % 3 == 0)
+			//if player hasnt collided with bobbomb and 4 seconds have passed
+			//set velocity to zero and 'explode'
+			if (gameState.seconds % 4 == 0)
 			{
 				bobBombObj.velocity = { 0,0 };
-				Play::SetSprite(bobBombObj, "bobbomb_walk_s_a_8", 0.25f);
+				Play::DrawObjectTransparent(bobBombObj, 0);
 
-				//if 4 seconds have passed after that then then spawn explosions and delete bobBomb object 
-				if (gameState.seconds % 4 == 0)
-				{
-					Play::DrawObjectTransparent(bobBombObj, 0);
+				int explosion1ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x + 5 , bobBombObj.pos.y }, 15, "explosion_12");
+				int explosion2ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x , bobBombObj.pos.y }, 15, "explosion_12");
+				int explosion3ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x - 5 , bobBombObj.pos.y }, 15, "explosion_12");
 
-					int explosion1ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x + 5 , bobBombObj.pos.y }, 15, "explosion_12");
-					int explosion2ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x , bobBombObj.pos.y }, 15, "explosion_12");
-					int explosion3ID = Play::CreateGameObject(typeBobBombExplosion, { bobBombObj.pos.x - 5 , bobBombObj.pos.y }, 15, "explosion_12");
+				GameObject& explosion1Obj = Play::GetGameObject(explosion1ID);
+				GameObject& explosion2Obj = Play::GetGameObject(explosion2ID);
+				GameObject& explosion3Obj = Play::GetGameObject(explosion3ID);
 
-					GameObject& explosion1Obj = Play::GetGameObject(explosion1ID);
-					GameObject& explosion2Obj = Play::GetGameObject(explosion2ID);
-					GameObject& explosion3Obj = Play::GetGameObject(explosion3ID);
+				explosion1Obj.animSpeed = explosion2Obj.animSpeed = explosion3Obj.animSpeed = 0.25f;
 
-					explosion1Obj.animSpeed = explosion2Obj.animSpeed = explosion3Obj.animSpeed = 0.25f;
+				//Set scale to random number between 0.7 and 0.9
+				explosion1Obj.scale = GenRandomNumRange(0.7, 0.9);
+				explosion2Obj.scale = GenRandomNumRange(0.7, 0.9);
+				explosion3Obj.scale = GenRandomNumRange(0.7, 0.9);
 
-					//Set scale to random number between 0.7 and 0.9
-					explosion1Obj.scale = GenRandomNumRange(0.7, 0.9);
-					explosion2Obj.scale = GenRandomNumRange(0.7, 0.9);
-					explosion3Obj.scale = GenRandomNumRange(0.7, 0.9);
-
-					//Set Random Rotation
-					explosion1Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
-					explosion2Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
-					explosion3Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
-					Play::DestroyGameObject(bobBombID);
-				}
+				//Set Random Rotation
+				explosion1Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
+				explosion2Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
+				explosion3Obj.rotation = GenRandomNumRange(0.0, 2 * PLAY_PI);
+				bobBombObj.type = typeDestroyed;
 			}
 		}
 
@@ -1050,7 +1085,7 @@ void UpdateDestroyed()
 			Play::DrawObjectRotated(desObj, (10 - desObj.frame) / 10.0f);
 		}
 
-		if (!Play::IsVisible(desObj) || desObj.frame >= 10)
+		if (!Play::IsVisible(desObj) || desObj.frame >= 8)
 		{
 			Play::DestroyGameObject(desID);
 		}
@@ -1487,7 +1522,6 @@ void CreateUI()
 	GameObject& healthIcon3Obj = Play::GetGameObject(healthIcon3ID);
 
 	healthIcon1Obj.scale = healthIcon2Obj.scale = healthIcon3Obj.scale = 1.5;
-
 }
 
 //          MISCELLANEOUS:
