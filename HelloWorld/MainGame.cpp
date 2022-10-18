@@ -612,7 +612,7 @@ void UpdateBossState()
 				//do short range attack
 				for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
 				{
-					int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, {bowserObj.pos}, 0, "bowser_srproj_4");
+					int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, {bowserObj.pos.x + 80 * cos(rad + 0.75f * PLAY_PI), bowserObj.pos.y + 80 * sin(rad + 0.75f * PLAY_PI)}, 0, "bowser_srproj_4");
 					GameObject& shortRangeProj = Play::GetGameObject(shortRangeProjID);
 					shortRangeProj.animSpeed = 0.25f;
 				}
@@ -720,7 +720,7 @@ void UpdateBossProjectiles()
 
 		if (Play::IsColliding(bossProjObj,playerObj)) 
 		{
-			gameState.playerState == PlayerState::playerDamaged;
+			gameState.playerState = PlayerState::playerDamaged;
 			bossProjObj.type = typeDestroyed;
 		}
 
@@ -740,11 +740,11 @@ void UpdateBossProjectiles()
 
 		if (Play::IsColliding(bossProjObj, playerObj))
 		{
-			gameState.playerState == PlayerState::playerDamaged;
+			gameState.playerState = PlayerState::playerDamaged;
 			bossProjObj.type = typeDestroyed;
 		}
 
-		if (bossProjObj.frame > 60)
+		if (bossProjObj.frame > 28)
 		{
 			bossProjObj.type = typeDestroyed;
 		}
