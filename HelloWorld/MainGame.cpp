@@ -9,9 +9,20 @@ const int displayScale = 1;
 
 const std::vector<std::string> vOrientations = { "N", "E", "S", "W" };
 
+
+enum RoundState
+{
+	tutorialRound = 0,
+	normalRound,
+	bossRound,
+	roundLose,
+	roundWin,
+};
+
 enum PlayerState 
 {
-	playerAppear = 0,
+	playerDefault = 0,
+	playerAppear ,
 	playerNotDebuffed,
 	playerDebuffed,
 	playerTransform,
@@ -24,7 +35,8 @@ enum PlayerState
 
 enum BossState 
 {
-	bossAppear = 0,
+	bossDefault = 0,
+	bossAppear,
 	bossIdle,
 	bossAgro,
 	bossDamaged,
@@ -54,26 +66,28 @@ enum GameObjectType
 	typeMagiKoopa,
 	typeMagiKoopaProj,
 	typeBowser,
+	typeBowserIcon,
+	typeBowserProj,
 	//Miscellaneous Types
 	typeDestroyed,
 	typeSpikes,
+	typeTutScreen,
 };
 
 struct GameState 
 {
 	int bossHp = 4;
 	int playerHP = 3;
-	int score = 0;
-	int framesPassed = 0;
-	int seconds = 0; 
-	int stateCounter = 0;
+	int score = 15;
+	int timePassed = 0; 
 	std::string playerOrientation{};
 	bool playerisDebuffed = false;
 	bool debugging = false;
 	bool isBossAtkLngRng = false;
-	PlayerState playerState = PlayerState::playerAppear;
-	BossState bossState = BossState::bossAppear;
-};
+	PlayerState playerState = PlayerState::playerDefault;
+	BossState bossState = BossState::bossDefault;
+	RoundState roundState = RoundState::tutorialRound;
+}; 
 
 GameState gameState;
 
@@ -89,6 +103,8 @@ void UpdateHammer();
 //			ENEMY RELATED:
 
 void UpdateBossState();
+void UpdateBossIcon();
+void UpdateBossProjectiles();
 void UpdateGoombas();
 void UpdateDryBones();
 void UpdateBobBombs();
@@ -96,12 +112,14 @@ void UpdateMagiKoopa();
 
 //			STAGE RELATED:
 
+void UpdateRoundState();
 void UpdateSpikes();
+
+
 //          MISCELLANEOUS:
 
 void UpdateDestroyed();
 void UpdateUI();
-void UpdateTime();
 
 //-------------------------------------------------------------------------------------------------------------------------------
 //												HANDLE FUNCTIONS	
@@ -125,7 +143,7 @@ void ScreenBouncing(GameObject&, bool);
 void SetVelocity(GameObject&, std::string);
 Point2f GetRandomPositionInPS();
 void DecelerateObject(GameObject&, float);
-void ClearEnemiesOnScreen();
+void ClearEnemiesAndItems();
 
 //			UI RELATED:
 
@@ -155,24 +173,28 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35");
 	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
 	int bowserID = Play::CreateGameObject(typeBowser, { displayWidth + 75 , 500 }, 33, "bowser_walk_w_12");
+	int bowserIconID = Play::CreateGameObject(typeBowserIcon, { Play::GetGameObjectByType(typeBowser).pos.x , Play::GetGameObjectByType(typeBowser).pos.y - 30 }, 33, "peachvoice_summon_8");
+	//start audio loop
 	CreateUI();
-	//SpawnEnemies();
 }
 
 // Called by PlayBuffer every frame (60 times a second!)
 bool MainGameUpdate( float elapsedTime )
 {
-	gameState.framesPassed ++;
+	static float fTotalGameTime = 0.f;
+	fTotalGameTime += elapsedTime;
+	gameState.timePassed = fTotalGameTime;
 	Play::DrawBackground();
 	Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), {displayWidth /2 , 25 }, Play::CENTRE);
 	Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth /2 , displayHeight - 25 }, Play::CENTRE);
-	UpdateTime();
 	UpdateDestroyed();
 	UpdateGoombas();
 	UpdateBobBombs();
 	UpdateMagiKoopa();
-	UpdateDryBones();;
-	UpdatePlayerState();
+	UpdateDryBones();
+	UpdateConsumables();
+	UpdateBossIcon();
+	UpdateRoundState();
 	UpdateHammer();
 	UpdateSpikes();
 	UpdateUI();
@@ -207,6 +229,9 @@ void UpdatePlayerState()
 
 	switch (gameState.playerState)
 	{
+	case PlayerState::playerDefault:
+	{
+	}
 	case PlayerState::playerAppear:
 	{
 		Play::SetSprite(playerObj, "mario_walk_e_12", 0.25f);
@@ -259,14 +284,13 @@ void UpdatePlayerState()
 		//Minus 1 player health and move to relevant move state
 		if (gameState.playerHP - 1 == 0)
 		{
-
 			gameState.playerHP--;
 
 			//Destory first object in list as they will have 1hp so there should only be 1 health icon
 			GameObject& frontHealthIconToDelObj = Play::GetGameObject(vHealthIcons.front());
 			frontHealthIconToDelObj.type = typeDestroyed;
 
-			gameState.playerState = PlayerState::playerDead;
+			gameState.roundState = RoundState::roundLose;
 		}
 		else 
 		{
@@ -320,40 +344,12 @@ void UpdatePlayerState()
 	{
 		playerObj.velocity = { 0,0 };
 		Play::SetSprite(playerObj, "mario_shock_6", 0.25f);
-		Play::DrawFontText("SuperMario25636px_10x10", "YOU LOSE", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
-		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
-
-		if (Play::KeyPressed(VK_RETURN) == true) 
-		{
-			gameState.bossHp = 4;
-			gameState.playerHP = 3;
-			gameState.score = 0;
-			gameState.framesPassed = 0;
-			gameState.seconds = 0;
-			gameState.stateCounter = 0;
-			gameState.playerOrientation = "";
-			gameState.playerisDebuffed = false;
-			gameState.debugging = false;
-			gameState.isBossAtkLngRng = false;
-			
-			//start audio loop
-
-			//Delete all enemies and move boss to off screen
-			ClearEnemiesOnScreen();
-
-			playerObj.pos = { -50 ,500 };
-			bowserObj.pos = { displayWidth + 75 , 500 };
-			gameState.playerState = PlayerState::playerAppear;
-			gameState.bossState = BossState::bossAppear;
-		}
 	}
 	break;
 	case PlayerState::playerPowerUp:
 	{
-		gameState.stateCounter++;
-
 		//Give player flashing yellow effect
-		if (gameState.stateCounter % 5 == 0) 
+		if (gameState.timePassed % 2 == 0)
 		{
 			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId),Play::cYellow);
 		}
@@ -372,12 +368,11 @@ void UpdatePlayerState()
 			HandleNotDebuffedControls();
 		}
 
-		//if seven 5 seconds have passed then clear colouring
+		//if 6 seconds have passed then clear colouring
 		//rest counter and move player state to relevant state
-		if (gameState.seconds % 4 == 0) 
+		if (gameState.timePassed % 7 == 0) 
 		{
 			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId), Play::cWhite);
-			gameState.stateCounter = 0;
 
 			if (gameState.playerisDebuffed)
 			{
@@ -498,9 +493,16 @@ void UpdateHammer()
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
+	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
 
 	//keeps hammer and player positions the same 
 	hammerObj.pos = playerObj.pos;
+
+	//Boss Hammer Interactions
+	if (gameState.playerState == PlayerState::playerAttack && Play::IsColliding(hammerObj,bowserObj) && gameState.bossState == BossState::bossIdle)
+	{
+		gameState.bossState = BossState::bossDamaged;
+	}
 
 	//Dont draw hammer unless in attack state
 	if (gameState.playerState == PlayerState::playerAttack)
@@ -521,48 +523,50 @@ void UpdateBossState()
 {
 	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
-	GameObject& playerObj = Play::GetGameObjectByType(typeHammer);
+	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
 
 	switch (gameState.bossState) 
 	{
+	case BossState::bossDefault:
+	{
+	}
 	case BossState::bossAppear:
 	{
-		if (gameState.score == 15 || gameState.seconds == 45) 
-		{
-			ClearEnemiesOnScreen();
-			Play::SetSprite(bowserObj, "bowser_walk_w_12", 0.25f);
-			bowserObj.velocity = { -2.5f,0 };
+		ClearEnemiesAndItems();
+		Play::SetSprite(bowserObj, "bowser_walk_w_12", 0.25f);
+		bowserObj.velocity = { -2.5f,0 };
 
-			if (bowserObj.pos.x < displayWidth - 100) 
-			{
-				gameState.bossState = BossState::bossIdle;
-			}
+		if (bowserObj.pos.x < displayWidth - 100) 
+		{
+			bowserObj.velocity = { 0,0 };
+			gameState.bossState = BossState::bossIdle;
 		}
+		
 		//boss will walk from right
 		//once they reach certain x amount move to idle
 	}
 	break;
 	case BossState::bossIdle:
 	{
-		Play::SetSprite(bowserObj, "bowser_idle_27", 0.25f);
+		Play::SetSprite(bowserObj, "bowser_idle_14", 0.25f);
 		float distanceFromplayer = FindDistance(bowserObj, playerObj);
 
-		if (gameState.seconds % 4 == 0) 
+		if (gameState.timePassed % 4 == 0) 
 		{
 			//if list of enemies is empty move to spawn mob state
-			if (Play::CollectGameObjectIDsByType(typeGoomba).size() + Play::CollectGameObjectIDsByType(typeBobBombNotAlight).size() + Play::CollectGameObjectIDsByType(typeDryBones).size() + Play::CollectGameObjectIDsByType(typeMagiKoopa).size() == 0)
+			if (Play::CollectGameObjectIDsByType(typeMagiKoopa).size() == 0)
 			{
 				gameState.bossState = BossState::bossSummonMob;
 			}
 
 			//if distance from player is < 200 then set isBossAtkLngRng to false and move to state boss agro
-			else if (distanceFromplayer < 200)
+			else if (distanceFromplayer < 300)
 			{
 				gameState.isBossAtkLngRng = false;
 				gameState.bossState = BossState::bossAgro;
 			}
 			//if distance from player is > 200 then set isBossAtkLngRng to true and move to state boss agro
-			else if (distanceFromplayer > 200)
+			else if (distanceFromplayer > 300)
 			{
 				gameState.isBossAtkLngRng = true;
 				gameState.bossState = BossState::bossAgro;
@@ -573,17 +577,34 @@ void UpdateBossState()
 	case BossState::bossAgro:
 	{
 		//Play attack animation
-		Play::SetSprite(bowserObj, "bowser_attack_42", 0.25f);
+		Play::SetSprite(bowserObj, "bowser_attack_14", 0.25f);
 
-		if (gameState.isBossAtkLngRng)
+		//Angle from 
+		float playerToMagiAng = atan2f(bowserObj.pos.y - playerObj.pos.y, bowserObj.pos.x - playerObj.pos.x);
+
+		Play::DrawDebugText({ displayWidth / 2 , displayHeight / 2 }, "Agro", Play::cGreen);
+
+		if (bowserObj.frame == 13) 
 		{
-			//do long range attack
-			gameState.bossState = BossState::bossIdle;
-		}
-		else 
-		{
-			//do short range attack
-			gameState.bossState = BossState::bossIdle;
+			if (gameState.isBossAtkLngRng)
+			{
+				//do long range attack
+				Play::DrawDebugText({ displayWidth / 2 , (displayHeight / 2) - 50 }, "Long Range", Play::cGreen);
+
+				//Summon Fireballs from sky
+				for (int i = 0; i < 2; i++)
+				{
+
+				}
+
+				gameState.bossState = BossState::bossIdle;
+			}
+			else
+			{
+				//do short range attack
+				Play::DrawDebugText({ displayWidth / 2 , (displayHeight / 2) - 50 }, "Short Range", Play::cGreen);
+				gameState.bossState = BossState::bossIdle;
+			}
 		}
 	}
 	break;
@@ -594,10 +615,10 @@ void UpdateBossState()
 
 		//If bosshp -- = 0 then move boss state to bossDead
 		//and decrement boss hp
-		if (gameState.bossHp-- == 0)
+		if (gameState.bossHp - 1 == 0)
 		{
 			gameState.bossHp--;
-			gameState.bossState = BossState::bossDead;
+			gameState.roundState = RoundState::roundWin;
 		}
 		else 
 		{
@@ -610,14 +631,15 @@ void UpdateBossState()
 	case BossState::bossSummonMob:
 	{
 		//Play attack animation
-		Play::SetSprite(bowserObj, "bowser_attack_42", 0.25f);
+		Play::SetSprite(bowserObj, "bowser_attack_14", 0.25f);
 
+		Play::DrawDebugText({ displayWidth / 2 , displayHeight / 2 }, "Mob", Play::cGreen);
 		//if animation reaches frame 20 spawn enemies and move back to state idle 
-		if (bowserObj.frame == 19) 
+		if (bowserObj.frame == 13) 
 		{
 			//Spawn mobs
-			//SpawnEnemies();
-			//gameState.bossState = BossState::bossIdle;
+			SpawnEnemies();
+			gameState.bossState = BossState::bossIdle;
 		}
 	}
 	break;
@@ -625,65 +647,11 @@ void UpdateBossState()
 	{
 		//play damage sprite
 		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
-		Play::DrawFontText("SuperMario25636px_10x10", "YOU WIN", { displayWidth / 2 , displayHeight / 2}, Play::CENTRE);
-		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30}, Play::CENTRE);
-
-		//Reset game elements
-		if (Play::KeyPressed(VK_RETURN) == true)
-		{
-			gameState.bossHp = 4;
-			gameState.playerHP = 3;
-			gameState.score = 0;
-			gameState.framesPassed = 0;
-			gameState.seconds = 0;
-			gameState.stateCounter = 0;
-			gameState.playerOrientation = "";
-			gameState.playerisDebuffed = false;
-			gameState.debugging = false;
-			gameState.isBossAtkLngRng = false;
-
-			//start audio loop
-
-			//Delete all enemies and move boss to off screen
-			ClearEnemiesOnScreen();
-			playerObj.pos = { -50 ,500 };
-			bowserObj.pos = { displayWidth + 75 , 500 };
-
-			gameState.playerState = PlayerState::playerAppear;
-			gameState.bossState = BossState::bossAppear;
-		}
 	}
 	break;
 	case BossState::bossWin:
 	{
 		Play::SetSprite(bowserObj, "bowser_win_16", 0.25f);
-		Play::DrawFontText("SuperMario25636px_10x10", "YOU LOSE", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
-		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
-
-		//Reset Game elements
-		if (Play::KeyPressed(VK_RETURN) == true)
-		{
-			gameState.bossHp = 4;
-			gameState.playerHP = 3;
-			gameState.score = 0;
-			gameState.framesPassed = 0;
-			gameState.seconds = 0;
-			gameState.stateCounter = 0;
-			gameState.playerOrientation = "";
-			gameState.playerisDebuffed = false;
-			gameState.debugging = false;
-			gameState.isBossAtkLngRng = false;
-
-			//start audio loop
-
-			//Delete all enemies and move boss to off screen
-			ClearEnemiesOnScreen();
-
-			playerObj.pos = {-50 ,500};
-			bowserObj.pos = {displayWidth + 75 , 500};
-			gameState.playerState = PlayerState::playerAppear;
-			gameState.bossState = BossState::bossAppear;
-		}
 	}
 	break;
 	}
@@ -694,6 +662,52 @@ void UpdateBossState()
 	//update object
 	//drawobject --> maybe rotated have to see how things are implemented
 }
+
+//Used to update different boss attack icons
+void UpdateBossIcon() 
+{
+	GameObject& bossIconObj = Play::GetGameObjectByType(typeBowserIcon);
+	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
+
+	bossIconObj.pos = { bowserObj.pos.x,bowserObj.pos.y - 70 };
+
+	//if boss state is agro or summonmob then set the relevant sprite and draw the icon
+	if (gameState.bossState == BossState::bossAgro) 
+	{
+		if (gameState.isBossAtkLngRng) 
+		{
+			Play::SetSprite(bossIconObj, "peachvoice_longrange_8", 0.25f);
+		}
+		else 
+		{
+			Play::SetSprite(bossIconObj, "peachvoice_shortrange_8", 0.25f);
+		}
+		Play::DrawObject(bossIconObj);
+	}
+	else if (gameState.bossState == BossState::bossSummonMob) 
+	{
+		
+		Play::SetSprite(bossIconObj, "peachvoice_summon_8", 0.25f);
+		Play::DrawObject(bossIconObj);
+	}
+	Play::UpdateGameObject(bossIconObj);
+}
+
+//Used to update boss long range projectiles
+void UpdateBossProjectiles() 
+{
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	std::vector<int> vBossProj = Play::CollectGameObjectIDsByType(typeBowserProj);
+	for (int bossProjID : vBossProj) 
+	{
+		GameObject& bossProjObj = Play::GetGameObject(bossProjID);
+
+
+		Play::UpdateGameObject(bossProjObj);
+		Play::DrawObject(bossProjObj);
+	}
+}
+
 
 //Used to update Goomba enemies
 void UpdateGoombas() 
@@ -839,7 +853,7 @@ void UpdateDryBones()
 			Play::PointGameObject(dryBoneHeadObj, 1, playerObj.pos.x, playerObj.pos.y);
 
 			//if 7 seconds have paassed and the head hasnt collided with the player then destroy the head and body
-			if (gameState.seconds % 7 == 0) 
+			if (gameState.timePassed % 6 == 0) 
 			{
 				dryBoneHeadObj.type = typeDestroyed;
 
@@ -968,7 +982,7 @@ void UpdateBobBombs()
 		{
 			//if player hasnt collided with bobbomb and 4 seconds have passed
 			//set velocity to zero and 'explode'
-			if (gameState.seconds % 4 == 0)
+			if (gameState.timePassed % 5 == 0)
 			{
 				bobBombObj.velocity = { 0,0 };
 				Play::DrawObjectTransparent(bobBombObj, 0);
@@ -1189,6 +1203,144 @@ void UpdateMagiKoopa()
 
 //			STAGE RELATED:
 
+//Used to update round state
+void UpdateRoundState() 
+{
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
+
+	switch (gameState.roundState) 
+	{
+	case RoundState::tutorialRound:
+	{
+		//Update TUt Funciton Here
+
+		if (Play::KeyDown(VK_RETURN)) 
+		{
+			gameState.playerState = PlayerState::playerAppear;
+			gameState.roundState = RoundState::normalRound;
+		}
+	}
+	break;
+
+	case RoundState::normalRound:
+	{
+		UpdatePlayerState();
+
+		//enemy list is empty wait 3 seconds and then spawn enemies
+		if (Play::CollectGameObjectIDsByType(typeGoomba).size() + Play::CollectGameObjectIDsByType(typeBobBombNotAlight).size() + Play::CollectGameObjectIDsByType(typeBobBombAlight).size() + Play::CollectGameObjectIDsByType(typeDryBones).size() + Play::CollectGameObjectIDsByType(typeMagiKoopa).size() == 0) 
+		{
+			if (gameState.timePassed % 4 == 0) 
+			{
+				SpawnEnemies();
+			}
+		}
+
+		//every 2 seconds if needed spawn a consumable
+		if (gameState.timePassed % 7 == 0)
+		{
+			SpawnPlayerConsumables();
+		}
+
+		//if score is more than 14 or 45 seconds have passed then move to bossround and make boss appear
+		if (gameState.score > 14 || gameState.timePassed == 45) 
+		{
+			gameState.bossState = BossState::bossAppear;
+			gameState.roundState = RoundState::bossRound;
+			//stop normal round audio and start boss round audio
+		}
+	}
+	break;
+	case RoundState::bossRound:
+	{
+		UpdatePlayerState();
+		UpdateBossState();
+	}
+	break;
+	case RoundState::roundLose:
+	{
+
+		ClearEnemiesAndItems();
+
+		playerObj.velocity = { 0,0 };
+		Play::SetSprite(playerObj, "mario_shock_6", 0.25f);
+
+		Play::UpdateGameObject(playerObj);
+		Play::DrawObject(playerObj);
+
+		Play::SetSprite(bowserObj, "bowser_win_16", 0.25f);
+
+		Play::UpdateGameObject(bowserObj);
+		Play::DrawObject(bowserObj);
+
+		Play::DrawFontText("SuperMario25636px_10x10", "YOU LOST", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
+
+		//Reset game elements
+		if (Play::KeyPressed(VK_RETURN) == true)
+		{
+			gameState.bossHp = 4;
+			gameState.playerHP = 3;
+			gameState.score = 0;
+			gameState.playerOrientation = "";
+			gameState.playerisDebuffed = false;
+			gameState.debugging = false;
+			gameState.isBossAtkLngRng = false;
+
+			//stop lose audio loop
+			//start audio loop
+
+			//Delete all enemies and move boss to off screen
+			playerObj.pos = { -50 ,500 };
+			bowserObj.pos = { displayWidth + 75 , 500 };
+
+			gameState.playerState = PlayerState::playerDefault;
+			gameState.bossState = BossState::bossDefault;
+			gameState.roundState = RoundState::tutorialRound;
+		}
+	}
+	break;
+	case RoundState::roundWin:
+	{
+		ClearEnemiesAndItems();
+
+		UpdatePlayerState();
+	
+		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
+		Play::UpdateGameObject(bowserObj);
+		Play::DrawObject(bowserObj);
+
+		Play::DrawFontText("SuperMario25636px_10x10", "YOU WIN", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
+
+		//Reset game elements
+		if (Play::KeyPressed(VK_RETURN) == true)
+		{
+			gameState.bossHp = 4;
+			gameState.playerHP = 3;
+			gameState.score = 0;
+			gameState.playerOrientation = "";
+			gameState.playerisDebuffed = false;
+			gameState.debugging = false;
+			gameState.isBossAtkLngRng = false;
+
+			//stop win audio loop
+			//start audio loop
+
+			//Delete all enemies and move boss to off screen
+			playerObj.pos = { -50 ,500 };
+			bowserObj.pos = { displayWidth + 75 , 500 };
+
+			gameState.playerState = PlayerState::playerDefault;
+			gameState.bossState = BossState::bossDefault;
+			gameState.roundState = RoundState::tutorialRound;
+		}
+	}
+	break;
+	}
+}
+
+
 //Used to draws spikes
 void UpdateSpikes() 
 {
@@ -1235,16 +1387,6 @@ void UpdateUI()
 		GameObject& healthIconObj = Play::GetGameObject(healthIconID);
 		Play::UpdateGameObject(healthIconObj);
 		Play::DrawObjectRotated(healthIconObj);
-	}
-}
-
-//Used to update time passed
-void UpdateTime() 
-{
-	//if framesPassed is divisible by 60 then a second has passed so add 1 to seconds
-	if (gameState.framesPassed % 60 == 0 ) 
-	{
-		gameState.seconds++;
 	}
 }
 
@@ -1431,38 +1573,48 @@ void HandleHammerAnimations()
 //Used to spawn enemies in initial stage
 void SpawnEnemies() 
 {
-	//Spawn/Create 2 goomba gameobjects
-	for (int i = 0; i < 2; i++) 
+
+	if (gameState.roundState == RoundState::normalRound) 
 	{
-		int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(), 10, "goomba_walk_e_8");
-		GameObject& goombaObj = Play::GetGameObject(goombaID);
-		SetVelocity(goombaObj, "x");
+		//Spawn/Create 2 goomba gameobjects
+		for (int i = 0; i < 2; i++)
+		{
+			int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(), 10, "goomba_walk_e_8");
+			GameObject& goombaObj = Play::GetGameObject(goombaID);
+			SetVelocity(goombaObj, "x");
+		}
+
+		//Spawn/Create 2 bobBomb gameobjects
+		for (int i = 0; i < 2; i++)
+		{
+			int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(), 10, "bobbomb_walk_e_8");
+			GameObject& bobBombObj = Play::GetGameObject(bobbombID);
+			SetVelocity(bobBombObj, "x");
+		}
+
+		//Spawn/Create 1 drybones or magikoopa enemy based on the chance variable
+		int chance = PickBetween(1, -1);
+
+		if (chance == 1)
+		{
+			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(), 15, "magikoopa_s_8");
+			GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+			SetVelocity(magiKoopaObj, "y");
+		}
+		else
+		{
+			int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(), 15, "drybones_s_16");
+			GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+			SetVelocity(dryBonesObj, "both");
+		}
 	}
 
-	//Spawn/Create 2 bobBomb gameobjects
-	for (int i = 0; i < 2; i++) 
+	else if (gameState.roundState == RoundState::bossRound) 
 	{
-		int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(), 10, "bobbomb_walk_e_8");
-		GameObject& bobBombObj = Play::GetGameObject(bobbombID);
-		SetVelocity(bobBombObj, "x");
-	}
-
-	//Spawn/Create 1 drybones or magikoopa enemy based on the chance variable
-	int chance = PickBetween(1, -1);
-
-	if (chance == 1) 
-	{
-		int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(), 15, "magikoopa_s_8");
+		int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, { 40 , Play::RandomRollRange(395, 605) }, 15, "magikoopa_s_8");
 		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
 		SetVelocity(magiKoopaObj, "y");
 	}
-	else 
-	{
-		int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(), 15, "drybones_s_16");
-		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
-		SetVelocity(dryBonesObj, "both");
-	}
-	
 }
 
 //used to spawn player consumables
@@ -1477,7 +1629,7 @@ void SpawnPlayerConsumables()
 	}
 
 	//if player health is less than 3 (so less than max health) and there isnt 2 health pickups on screen then spawn a healthup
-	else if (gameState.playerHP < 3 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 2)
+	else if (gameState.playerHP < 3 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 1)
 	{
 		int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(), 20, "health_up");
 		GameObject& healthUpObj = Play::GetGameObject(healthUpID);
@@ -1589,7 +1741,7 @@ void DecelerateObject(GameObject& gameObj, float rate)
 }
 
 //Used to clear/destroy all the enemies and effects on screen
-void ClearEnemiesOnScreen() 
+void ClearEnemiesAndItems() 
 {
 	//Loop through enemy vectors and delete gameobjects
 	for (int goombaID : Play::CollectGameObjectIDsByType(typeGoomba))
@@ -1813,9 +1965,9 @@ void ShowDebugUI()
 	//Timer Stuff
 	
 	//frames
-	std::string framesPasseddString = std::to_string(gameState.framesPassed);
-	Play::DrawDebugText({80 , 45}, framesPasseddString.c_str(), Play::cGreen);
+	//std::string framesPasseddString = std::to_string(gameState.framesPassed);
+	//Play::DrawDebugText({80 , 45}, framesPasseddString.c_str(), Play::cGreen);
 	//seconds
-	std::string timePassedString = std::to_string(gameState.seconds);
+	std::string timePassedString = std::to_string(gameState.timePassed);
 	Play::DrawDebugText({ 80 , 65 }, timePassedString.c_str(), Play::cGreen);
 }
