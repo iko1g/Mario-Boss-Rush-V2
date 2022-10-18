@@ -67,7 +67,8 @@ enum GameObjectType
 	typeMagiKoopaProj,
 	typeBowser,
 	typeBowserIcon,
-	typeBowserProj,
+	typeBowseLRP,
+	typeBowseSRP,
 	//Miscellaneous Types
 	typeDestroyed,
 	typeSpikes,
@@ -192,6 +193,7 @@ bool MainGameUpdate( float elapsedTime )
 	UpdateBobBombs();
 	UpdateMagiKoopa();
 	UpdateDryBones();
+	UpdateBossProjectiles();
 	UpdateConsumables();
 	UpdateBossIcon();
 	UpdateRoundState();
@@ -589,20 +591,32 @@ void UpdateBossState()
 			if (gameState.isBossAtkLngRng)
 			{
 				//do long range attack
-				Play::DrawDebugText({ displayWidth / 2 , (displayHeight / 2) - 50 }, "Long Range", Play::cGreen);
+				//Spawn a fireball at player x pos but off screen
+				int fireBall1ID = Play::CreateGameObject(typeBowseLRP, { playerObj.pos.x , -50 }, 20, "bowser_proj_8");
+				GameObject& fireBall1Obj = Play::GetGameObject(fireBall1ID);
+				fireBall1Obj.velocity = {0,5};
+				fireBall1Obj.animSpeed = 0.25f;
 
-				//Summon Fireballs from sky
-				for (int i = 0; i < 2; i++)
+				//Spawn a fireball at player x pos but off screen
+				if (gameState.timePassed % 2 == 0) 
 				{
-
+					int fireBall2ID = Play::CreateGameObject(typeBowseLRP, { playerObj.pos.x , -50 }, 20, "bowser_proj_8");
+					GameObject& longRangeProj2Obj = Play::GetGameObject(fireBall2ID);
+					longRangeProj2Obj.velocity = { 0,5 };
+					longRangeProj2Obj.animSpeed = 0.25f;
 				}
-
 				gameState.bossState = BossState::bossIdle;
 			}
 			else
 			{
 				//do short range attack
-				Play::DrawDebugText({ displayWidth / 2 , (displayHeight / 2) - 50 }, "Short Range", Play::cGreen);
+				for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
+				{
+					int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, {bowserObj.pos}, 0, "bowser_srproj_4");
+					GameObject& shortRangeProj = Play::GetGameObject(shortRangeProjID);
+					shortRangeProj.animSpeed = 0.25f;
+				}
+
 				gameState.bossState = BossState::bossIdle;
 			}
 		}
@@ -613,18 +627,21 @@ void UpdateBossState()
 		//playing damage sprite
 		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
 
-		//If bosshp -- = 0 then move boss state to bossDead
-		//and decrement boss hp
-		if (gameState.bossHp - 1 == 0)
+		if (gameState.timePassed % 3 == 0) 
 		{
-			gameState.bossHp--;
-			gameState.roundState = RoundState::roundWin;
-		}
-		else 
-		{
-			//else decrement bosshp and move boss state to bossIdle 
-			gameState.bossHp--;
-			gameState.bossState = BossState::bossIdle;
+			//If bosshp -- = 0 then move boss state to bossDead
+			//and decrement boss hp
+			if (gameState.bossHp - 1 == 0)
+			{
+				gameState.bossHp--;
+				gameState.roundState = RoundState::roundWin;
+			}
+			else
+			{
+				//else decrement bosshp and move boss state to bossIdle 
+				gameState.bossHp--;
+				gameState.bossState = BossState::bossIdle;
+			}
 		}
 	}
 	break;
@@ -633,7 +650,6 @@ void UpdateBossState()
 		//Play attack animation
 		Play::SetSprite(bowserObj, "bowser_attack_14", 0.25f);
 
-		Play::DrawDebugText({ displayWidth / 2 , displayHeight / 2 }, "Mob", Play::cGreen);
 		//if animation reaches frame 20 spawn enemies and move back to state idle 
 		if (bowserObj.frame == 13) 
 		{
@@ -658,9 +674,6 @@ void UpdateBossState()
 
 	Play::UpdateGameObject(bowserObj);
 	Play::DrawObject(bowserObj);
-	//c+v screenbouncing function from player update 
-	//update object
-	//drawobject --> maybe rotated have to see how things are implemented
 }
 
 //Used to update different boss attack icons
@@ -697,11 +710,44 @@ void UpdateBossIcon()
 void UpdateBossProjectiles() 
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
-	std::vector<int> vBossProj = Play::CollectGameObjectIDsByType(typeBowserProj);
-	for (int bossProjID : vBossProj) 
+	std::vector<int> vBossLProj = Play::CollectGameObjectIDsByType(typeBowseLRP);
+	std::vector<int> vBossSProj = Play::CollectGameObjectIDsByType(typeBowseSRP);
+
+	//Long Range Projectiles
+	for (int bossProjID : vBossLProj)
 	{
 		GameObject& bossProjObj = Play::GetGameObject(bossProjID);
 
+		if (Play::IsColliding(bossProjObj,playerObj)) 
+		{
+			gameState.playerState == PlayerState::playerDamaged;
+			bossProjObj.type = typeDestroyed;
+		}
+
+		if (bossProjObj.pos.y > displayHeight + 50)
+		{
+			bossProjObj.type = typeDestroyed;
+		}
+
+		Play::UpdateGameObject(bossProjObj);
+		Play::DrawObject(bossProjObj);
+	}
+
+	//Short Range Projectiles
+	for (int bossProjID : vBossSProj)
+	{
+		GameObject& bossProjObj = Play::GetGameObject(bossProjID);
+
+		if (Play::IsColliding(bossProjObj, playerObj))
+		{
+			gameState.playerState == PlayerState::playerDamaged;
+			bossProjObj.type = typeDestroyed;
+		}
+
+		if (bossProjObj.frame > 60)
+		{
+			bossProjObj.type = typeDestroyed;
+		}
 
 		Play::UpdateGameObject(bossProjObj);
 		Play::DrawObject(bossProjObj);
