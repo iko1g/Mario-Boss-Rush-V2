@@ -610,6 +610,7 @@ void UpdateBossState()
 			else
 			{
 				//do short range attack
+				//Make shield around boss's front
 				for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
 				{
 					int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, {bowserObj.pos.x + 80 * cos(rad + 0.75f * PLAY_PI), bowserObj.pos.y + 80 * sin(rad + 0.75f * PLAY_PI)}, 0, "bowser_srproj_4");
@@ -706,7 +707,7 @@ void UpdateBossIcon()
 	Play::UpdateGameObject(bossIconObj);
 }
 
-//Used to update boss long range projectiles
+//Used to update boss projectiles
 void UpdateBossProjectiles() 
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
@@ -744,6 +745,8 @@ void UpdateBossProjectiles()
 			bossProjObj.type = typeDestroyed;
 		}
 
+		//If short range has been through 7 cycles of animation then destroy
+		//the object
 		if (bossProjObj.frame > 28)
 		{
 			bossProjObj.type = typeDestroyed;
