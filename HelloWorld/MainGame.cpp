@@ -9,7 +9,6 @@ const int displayScale = 1;
 
 const std::vector<std::string> vOrientations = { "N", "E", "S", "W" };
 
-
 enum RoundState
 {
 	tutorialRound = 0,
@@ -51,7 +50,7 @@ enum GameObjectType
 	//Player Related Types
 	typePlayer,
 	typeHammer,
-	typeHealthIcon,
+	typePlayerHealthIcon,
 	typeGoldenMushroom,
 	typeRefreshingHerb,
 	typeHealth1UP,
@@ -66,7 +65,8 @@ enum GameObjectType
 	typeMagiKoopa,
 	typeMagiKoopaProj,
 	typeBowser,
-	typeBowserIcon,
+	typeBowserAttackIcon,
+	typeBowserHealthIcon,
 	typeBowseLRP,
 	typeBowseSRP,
 	//Miscellaneous Types
@@ -104,7 +104,7 @@ void UpdateHammer();
 //			ENEMY RELATED:
 
 void UpdateBossState();
-void UpdateBossIcon();
+void UpdateBossIcons();
 void UpdateBossProjectiles();
 void UpdateGoombas();
 void UpdateDryBones();
@@ -115,6 +115,7 @@ void UpdateMagiKoopa();
 
 void UpdateRoundState();
 void UpdateSpikes();
+void UpdateTutScreen();
 
 
 //          MISCELLANEOUS:
@@ -145,10 +146,14 @@ void SetVelocity(GameObject&, std::string);
 Point2f GetRandomPositionInPS();
 void DecelerateObject(GameObject&, float);
 void ClearEnemiesAndItems();
+void ClearHealthIcons();
 
 //			UI RELATED:
 
 void CreateUI();
+
+//			GAME ENTRY RELATED:
+void CreateDefaultGameObjects();
 
 //          MISCELLANEOUS:
 
@@ -170,11 +175,12 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	Play::CreateManager( displayWidth, displayHeight, displayScale );
 	Play::CentreAllSpriteOrigins();
 	Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
-	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
-	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35");
+	int spikeID = Play::CreateGameObject(typeSpikes, {displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
+	int tutScreenID = Play::CreateGameObject(typeTutScreen, { displayWidth / 2 , displayHeight / 2 }, 0, "tut_controls");
+	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35"); 
 	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
 	int bowserID = Play::CreateGameObject(typeBowser, { displayWidth + 75 , 500 }, 33, "bowser_walk_w_12");
-	int bowserIconID = Play::CreateGameObject(typeBowserIcon, { Play::GetGameObjectByType(typeBowser).pos.x , Play::GetGameObjectByType(typeBowser).pos.y - 30 }, 33, "peachvoice_summon_8");
+	int bowserIconID = Play::CreateGameObject(typeBowserAttackIcon, { Play::GetGameObjectByType(typeBowser).pos.x , Play::GetGameObjectByType(typeBowser).pos.y - 30 }, 33, "peachvoice_summon_8");
 	//start audio loop
 	CreateUI();
 }
@@ -186,8 +192,6 @@ bool MainGameUpdate( float elapsedTime )
 	fTotalGameTime += elapsedTime;
 	gameState.timePassed = fTotalGameTime;
 	Play::DrawBackground();
-	Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), {displayWidth /2 , 25 }, Play::CENTRE);
-	Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth /2 , displayHeight - 25 }, Play::CENTRE);
 	UpdateDestroyed();
 	UpdateGoombas();
 	UpdateBobBombs();
@@ -195,7 +199,7 @@ bool MainGameUpdate( float elapsedTime )
 	UpdateDryBones();
 	UpdateBossProjectiles();
 	UpdateConsumables();
-	UpdateBossIcon();
+	UpdateBossIcons();
 	UpdateRoundState();
 	UpdateHammer();
 	UpdateSpikes();
@@ -281,7 +285,7 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerDamaged:
 	{
-		std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typeHealthIcon);
+		std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typePlayerHealthIcon);
 
 		//Minus 1 player health and move to relevant move state
 		if (gameState.playerHP - 1 == 0)
@@ -315,7 +319,7 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerHeal:
 	{
-		std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typeHealthIcon);
+		std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typePlayerHealthIcon);
 		// Plus 1 to player health and move to relevant move state
 		gameState.playerHP++;
 
@@ -323,7 +327,7 @@ void UpdatePlayerState()
 		GameObject& backHealthIconObj = Play::GetGameObject(vHealthIcons.back());
 		
 		//Create new health icon at an offset of the health icon at the back of the vector
-		int healthIconToAddID = Play::CreateGameObject(typeHealthIcon, {backHealthIconObj.pos.x + 45,displayHeight - 65 }, 0, "health_icon");
+		int healthIconToAddID = Play::CreateGameObject(typePlayerHealthIcon, {backHealthIconObj.pos.x + 45,displayHeight - 65 }, 0, "health_icon");
 		GameObject& addedHealthIconObj = Play::GetGameObject(healthIconToAddID);
 		addedHealthIconObj.scale = 1.5;
 
@@ -538,7 +542,7 @@ void UpdateBossState()
 		Play::SetSprite(bowserObj, "bowser_walk_w_12", 0.25f);
 		bowserObj.velocity = { -2.5f,0 };
 
-		if (bowserObj.pos.x < displayWidth - 100) 
+		if (bowserObj.pos.x < displayWidth - 150) 
 		{
 			bowserObj.velocity = { 0,0 };
 			gameState.bossState = BossState::bossIdle;
@@ -625,6 +629,8 @@ void UpdateBossState()
 	break;
 	case BossState::bossDamaged:
 	{
+
+		std::vector<int> vBossHealthIcons = Play::CollectGameObjectIDsByType(typeBowserHealthIcon);
 		//playing damage sprite
 		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
 
@@ -636,11 +642,16 @@ void UpdateBossState()
 			{
 				gameState.bossHp--;
 				gameState.roundState = RoundState::roundWin;
+
+				GameObject& frontHealthIconToDelObj = Play::GetGameObject(vBossHealthIcons.front());
+				frontHealthIconToDelObj.type = typeDestroyed;
 			}
 			else
 			{
 				//else decrement bosshp and move boss state to bossIdle 
 				gameState.bossHp--;
+				GameObject& backHealthIconToDelObj = Play::GetGameObject(vBossHealthIcons.back());
+				backHealthIconToDelObj.type = typeDestroyed;
 				gameState.bossState = BossState::bossIdle;
 			}
 		}
@@ -678,9 +689,9 @@ void UpdateBossState()
 }
 
 //Used to update different boss attack icons
-void UpdateBossIcon() 
+void UpdateBossIcons() 
 {
-	GameObject& bossIconObj = Play::GetGameObjectByType(typeBowserIcon);
+	GameObject& bossIconObj = Play::GetGameObjectByType(typeBowserAttackIcon);
 	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
 
 	bossIconObj.pos = { bowserObj.pos.x,bowserObj.pos.y - 70 };
@@ -1262,7 +1273,7 @@ void UpdateRoundState()
 	{
 	case RoundState::tutorialRound:
 	{
-		//Update TUt Funciton Here
+		UpdateTutScreen();
 
 		if (Play::KeyDown(VK_RETURN)) 
 		{
@@ -1285,14 +1296,14 @@ void UpdateRoundState()
 			}
 		}
 
-		//every 2 seconds if needed spawn a consumable
-		if (gameState.timePassed % 7 == 0)
+		//every 9 seconds if needed spawn a consumable if the requirements are met to spawn that consumable
+		if (gameState.timePassed % 10 == 0 && gameState.timePassed > 0)
 		{
 			SpawnPlayerConsumables();
 		}
 
 		//if score is more than 14 or 45 seconds have passed then move to bossround and make boss appear
-		if (gameState.score > 14 || gameState.timePassed == 45) 
+		if (gameState.score > 14 || (gameState.timePassed % 45 == 0 && gameState.timePassed != 0))
 		{
 			gameState.bossState = BossState::bossAppear;
 			gameState.roundState = RoundState::bossRound;
@@ -1310,6 +1321,7 @@ void UpdateRoundState()
 	{
 
 		ClearEnemiesAndItems();
+		ClearHealthIcons();
 
 		playerObj.velocity = { 0,0 };
 		Play::SetSprite(playerObj, "mario_shock_6", 0.25f);
@@ -1322,9 +1334,6 @@ void UpdateRoundState()
 		Play::UpdateGameObject(bowserObj);
 		Play::DrawObject(bowserObj);
 
-		Play::DrawFontText("SuperMario25636px_10x10", "YOU LOST", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
-		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
-
 		//Reset game elements
 		if (Play::KeyPressed(VK_RETURN) == true)
 		{
@@ -1335,7 +1344,7 @@ void UpdateRoundState()
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
 			gameState.isBossAtkLngRng = false;
-
+			CreateUI();
 			//stop lose audio loop
 			//start audio loop
 
@@ -1352,15 +1361,12 @@ void UpdateRoundState()
 	case RoundState::roundWin:
 	{
 		ClearEnemiesAndItems();
-
+		ClearHealthIcons();
 		UpdatePlayerState();
 	
 		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
 		Play::UpdateGameObject(bowserObj);
 		Play::DrawObject(bowserObj);
-
-		Play::DrawFontText("SuperMario25636px_10x10", "YOU WIN", { displayWidth / 2 , displayHeight / 2 }, Play::CENTRE);
-		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) + 30 }, Play::CENTRE);
 
 		//Reset game elements
 		if (Play::KeyPressed(VK_RETURN) == true)
@@ -1372,6 +1378,7 @@ void UpdateRoundState()
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
 			gameState.isBossAtkLngRng = false;
+			CreateUI();
 
 			//stop win audio loop
 			//start audio loop
@@ -1399,6 +1406,15 @@ void UpdateSpikes()
 	Play::UpdateGameObject(spikeObj);
 	Play::DrawObject(spikeObj);
 }
+
+//Used to draw tutorial screens
+void UpdateTutScreen() 
+{
+	GameObject& tutScreenObj = Play::GetGameObjectByType(typeTutScreen);
+	Play::UpdateGameObject(tutScreenObj);
+	Play::DrawObject(tutScreenObj);
+}
+
 //          MISCELLANEOUS:
 
 //Used to update destroyed objects ()
@@ -1429,13 +1445,55 @@ void UpdateDestroyed()
 //Used to update UI
 void UpdateUI() 
 {
-	std::vector<int> vHealthIcons = Play::CollectGameObjectIDsByType(typeHealthIcon);
+	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
+	std::vector<int> vPlayerHealthIcons = Play::CollectGameObjectIDsByType(typePlayerHealthIcon);
+	std::vector<int> vBossHealthIcons = Play::CollectGameObjectIDsByType(typeBowserHealthIcon);
 
-	for (int healthIconID : vHealthIcons) 
+	//player health Icons
+	if (gameState.roundState != RoundState::tutorialRound) 
 	{
-		GameObject& healthIconObj = Play::GetGameObject(healthIconID);
-		Play::UpdateGameObject(healthIconObj);
-		Play::DrawObjectRotated(healthIconObj);
+		for (int playerHealthIconID : vPlayerHealthIcons)
+		{
+			GameObject& playerHealthIconObj = Play::GetGameObject(playerHealthIconID);
+			Play::UpdateGameObject(playerHealthIconObj);
+			Play::DrawObjectRotated(playerHealthIconObj);
+		}
+	}
+
+	//Text
+
+	//Score and Health
+	if (gameState.roundState == RoundState::normalRound || gameState.roundState == RoundState::bossRound) 
+	{
+		Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), { displayWidth / 2 , 25 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth / 2 , displayHeight - 25 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "BOSS HEALTH", { displayWidth - 150 ,  displayHeight - 25 }, Play::CENTRE);
+	}
+	else if (gameState.roundState == RoundState::roundLose || gameState.roundState == RoundState::roundWin)
+	{
+		Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), { displayWidth / 2 , 25 }, Play::CENTRE);
+	}
+	//Play Again
+	if (gameState.roundState == RoundState::roundLose) 
+	{
+		Play::DrawFontText("SuperMario25636px_10x10", "YOU LOST", { displayWidth / 2 , (displayHeight / 2) - 60 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) - 30 }, Play::CENTRE);
+	}
+	else if (gameState.roundState == RoundState::roundWin) 
+	{
+		Play::DrawFontText("SuperMario25636px_10x10", "YOU WON", { displayWidth / 2 , (displayHeight / 2) - 60 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "PRESS ENTER TO PLAY AGAIN", { displayWidth / 2 , (displayHeight / 2) - 30 }, Play::CENTRE);
+	}
+
+	//Boss Health Icons
+	if (bowserObj.pos.x < displayWidth - 150) 
+	{
+		for (int bossHealthIconID : vBossHealthIcons)
+		{
+			GameObject& bossHealthIconObj = Play::GetGameObject(bossHealthIconID);
+			Play::UpdateGameObject(bossHealthIconObj);
+			Play::DrawObjectRotated(bossHealthIconObj);
+		}
 	}
 }
 
@@ -1669,28 +1727,40 @@ void SpawnEnemies()
 //used to spawn player consumables
 void SpawnPlayerConsumables() 
 {
-	//if player health is not 0 and there isnt a golden mushroom on screen then spawn a golden mushroom
-	if (gameState.playerHP != 0 && Play::CollectGameObjectIDsByType(typeGoldenMushroom).size() < 1)
+	if (gameState.roundState == RoundState::normalRound) 
 	{
-		int goldenMushroomID = Play::CreateGameObject(typeGoldenMushroom, GetRandomPositionInPS(), 20, "invincible_powerup");
-		GameObject& goldenMushroomObj = Play::GetGameObject(goldenMushroomID);
-		SetVelocity(goldenMushroomObj, "both");
-	}
+		//if player health is not 0 and there isnt a golden mushroom on screen then spawn a golden mushroom
+		if (gameState.playerHP != 0 && Play::CollectGameObjectIDsByType(typeGoldenMushroom).size() < 1)
+		{
+			int goldenMushroomID = Play::CreateGameObject(typeGoldenMushroom, GetRandomPositionInPS(), 20, "invincible_powerup");
+			GameObject& goldenMushroomObj = Play::GetGameObject(goldenMushroomID);
+			SetVelocity(goldenMushroomObj, "both");
+		}
 
-	//if player health is less than 3 (so less than max health) and there isnt 2 health pickups on screen then spawn a healthup
-	else if (gameState.playerHP < 3 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 1)
-	{
-		int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(), 20, "health_up");
-		GameObject& healthUpObj = Play::GetGameObject(healthUpID);
-		SetVelocity(healthUpObj, "both");
-	}
+		//if player health is less than 2 and there isnt a health pickups on screen then spawn a healthup
+		else if (gameState.playerHP < 2 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 1)
+		{
+			int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(), 20, "health_up");
+			GameObject& healthUpObj = Play::GetGameObject(healthUpID);
+			SetVelocity(healthUpObj, "both");
+		}
 
-	//if player is debuffed and there isnt a refreshing herb already on screen then spawn refreshing herb
-	else if (gameState.playerState == PlayerState::playerDebuffed && Play::CollectGameObjectIDsByType(typeRefreshingHerb).size() < 1)
+		//if player is debuffed and there isnt a refreshing herb already on screen then spawn refreshing herb
+		else if (gameState.playerState == PlayerState::playerDebuffed && Play::CollectGameObjectIDsByType(typeRefreshingHerb).size() < 1)
+		{
+			int refreshingHerbID = Play::CreateGameObject(typeRefreshingHerb, GetRandomPositionInPS(), 20, "refreshing_herb");
+			GameObject& refreshingHerbObj = Play::GetGameObject(refreshingHerbID);
+			SetVelocity(refreshingHerbObj, "both");
+		}
+	}
+	else if (gameState.roundState == RoundState::bossRound)
 	{
-		int refreshingHerbID = Play::CreateGameObject(typeRefreshingHerb, GetRandomPositionInPS(), 20, "refreshing_herb");
-		GameObject& refreshingHerbObj = Play::GetGameObject(refreshingHerbID);
-		SetVelocity(refreshingHerbObj, "both");
+		 if (gameState.playerState == PlayerState::playerDebuffed && Play::CollectGameObjectIDsByType(typeRefreshingHerb).size() < 1)
+		{
+			int refreshingHerbID = Play::CreateGameObject(typeRefreshingHerb, GetRandomPositionInPS(), 20, "refreshing_herb");
+			GameObject& refreshingHerbObj = Play::GetGameObject(refreshingHerbID);
+			SetVelocity(refreshingHerbObj, "both");
+		}
 	}
 }
 
@@ -1792,7 +1862,23 @@ void DecelerateObject(GameObject& gameObj, float rate)
 //Used to clear/destroy all the enemies and effects on screen
 void ClearEnemiesAndItems() 
 {
-	//Loop through enemy vectors and delete gameobjects
+	//Loop through consumables vectors and delete gameobjects
+	for (int healthUpID : Play::CollectGameObjectIDsByType(typeHealth1UP))
+	{
+		Play::GetGameObject(healthUpID).type = typeDestroyed;
+	}
+
+	for (int refreshingHerbID : Play::CollectGameObjectIDsByType(typeRefreshingHerb))
+	{
+		Play::GetGameObject(refreshingHerbID).type = typeDestroyed;
+	}
+
+	for (int goldenMushID : Play::CollectGameObjectIDsByType(typeGoldenMushroom))
+	{
+		Play::GetGameObject(goldenMushID).type = typeDestroyed;
+	}
+
+	//Loop through enemy and enemy projectiles/effects vectors and delete gameobjects
 	for (int goombaID : Play::CollectGameObjectIDsByType(typeGoomba))
 	{
 		Play::GetGameObject(goombaID).type = typeDestroyed;
@@ -1839,22 +1925,55 @@ void ClearEnemiesAndItems()
 	}
 }
 
+//Used to clear health Icons after game has been restarted
+void ClearHealthIcons() 
+{
+	//Loop through health icon vectors and delete gameobjects
+	for (int playerHealthIconID : Play::CollectGameObjectIDsByType(typePlayerHealthIcon))
+	{
+		Play::GetGameObject(playerHealthIconID).type = typeDestroyed;
+	}
+
+	for (int bossHealthIconID : Play::CollectGameObjectIDsByType(typeBowserHealthIcon))
+	{
+		Play::GetGameObject(bossHealthIconID).type = typeDestroyed;
+	}
+}
+
 //			UI RELATED:
 
 //Used to draw UI
 void CreateUI() 
 {
-	//Create 3 health icon gameObjects 
-	int healthIcon1ID = Play::CreateGameObject(typeHealthIcon, { displayWidth / 2 - 45, displayHeight - 65 }, 0, "health_icon");
-	int healthIcon2ID = Play::CreateGameObject(typeHealthIcon, { displayWidth / 2, displayHeight - 65 }, 0, "health_icon");
-	int healthIcon3ID = Play::CreateGameObject(typeHealthIcon, { displayWidth / 2 + 45, displayHeight - 65 }, 0, "health_icon");
+	//Create 3 player healths icon gameObjects 
+	int healthIcon1ID = Play::CreateGameObject(typePlayerHealthIcon, { displayWidth / 2 - 45, displayHeight - 65 }, 0, "health_icon");
+	int healthIcon2ID = Play::CreateGameObject(typePlayerHealthIcon, { displayWidth / 2, displayHeight - 65 }, 0, "health_icon");
+	int healthIcon3ID = Play::CreateGameObject(typePlayerHealthIcon, { displayWidth / 2 + 45, displayHeight - 65 }, 0, "health_icon");
 
 	GameObject& healthIcon1Obj = Play::GetGameObject(healthIcon1ID);
 	GameObject& healthIcon2Obj = Play::GetGameObject(healthIcon2ID);
 	GameObject& healthIcon3Obj = Play::GetGameObject(healthIcon3ID);
 
 	healthIcon1Obj.scale = healthIcon2Obj.scale = healthIcon3Obj.scale = 1.5;
+
+	//Create 4 boss healths icon gameObjects 
+	int bossHealthIcon1ID = Play::CreateGameObject(typeBowserHealthIcon, { 1058,  displayHeight - 65 }, 0, "bowser_hp_icon");
+	int bossHealthIcon2ID = Play::CreateGameObject(typeBowserHealthIcon, { 1106,  displayHeight - 65 }, 0, "bowser_hp_icon");
+	int bossHealthIcon3ID = Play::CreateGameObject(typeBowserHealthIcon, { 1154,  displayHeight - 65 }, 0, "bowser_hp_icon");
+	int bossHealthIcon4ID = Play::CreateGameObject(typeBowserHealthIcon, { 1202,  displayHeight - 65 }, 0, "bowser_hp_icon");
+
+	GameObject& bossHealthIcon1Obj = Play::GetGameObject(bossHealthIcon1ID);
+	GameObject& bossHealthIcon2Obj = Play::GetGameObject(bossHealthIcon2ID);
+	GameObject& bossHealthIcon3Obj = Play::GetGameObject(bossHealthIcon3ID);
+	GameObject& bossHealthIcon4Obj = Play::GetGameObject(bossHealthIcon4ID);
+
+	bossHealthIcon1Obj.scale = bossHealthIcon2Obj.scale = bossHealthIcon3Obj.scale = bossHealthIcon4Obj.scale = 0.8;
 }
+
+//			GAME ENTRY RELATED:
+
+// Used to create default gameobjects that will need to be present on game entry
+void CreateDefaultGameObjects() {}
 
 //          MISCELLANEOUS:
 
@@ -2013,9 +2132,6 @@ void ShowDebugUI()
 	
 	//Timer Stuff
 	
-	//frames
-	//std::string framesPasseddString = std::to_string(gameState.framesPassed);
-	//Play::DrawDebugText({80 , 45}, framesPasseddString.c_str(), Play::cGreen);
 	//seconds
 	std::string timePassedString = std::to_string(gameState.timePassed);
 	Play::DrawDebugText({ 80 , 65 }, timePassedString.c_str(), Play::cGreen);
