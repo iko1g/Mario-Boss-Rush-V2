@@ -134,6 +134,7 @@ void HandleHammerAnimations();
 //												SPAWN FUNCTIONS	
 
 void SpawnEnemies();
+void SpawnFireballs(GameObject& ,char);
 void SpawnPlayerConsumables();
 
 //-------------------------------------------------------------------------------------------------------------------------------
@@ -175,12 +176,7 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	Play::CreateManager( displayWidth, displayHeight, displayScale );
 	Play::CentreAllSpriteOrigins();
 	Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
-	int spikeID = Play::CreateGameObject(typeSpikes, {displayWidth / 2 , displayHeight/ 2}, 0, "stage1bgn_spikes");
-	int tutScreenID = Play::CreateGameObject(typeTutScreen, { displayWidth / 2 , displayHeight / 2 }, 0, "tut_controls");
-	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35"); 
-	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
-	int bowserID = Play::CreateGameObject(typeBowser, { displayWidth + 75 , 500 }, 33, "bowser_walk_w_12");
-	int bowserIconID = Play::CreateGameObject(typeBowserAttackIcon, { Play::GetGameObjectByType(typeBowser).pos.x , Play::GetGameObjectByType(typeBowser).pos.y - 30 }, 33, "peachvoice_summon_8");
+	CreateDefaultGameObjects();
 	//start audio loop
 	CreateUI();
 }
@@ -585,9 +581,6 @@ void UpdateBossState()
 		//Play attack animation
 		Play::SetSprite(bowserObj, "bowser_attack_14", 0.25f);
 
-		//Angle from 
-		float playerToMagiAng = atan2f(bowserObj.pos.y - playerObj.pos.y, bowserObj.pos.x - playerObj.pos.x);
-
 		Play::DrawDebugText({ displayWidth / 2 , displayHeight / 2 }, "Agro", Play::cGreen);
 
 		if (bowserObj.frame == 13) 
@@ -615,11 +608,22 @@ void UpdateBossState()
 			{
 				//do short range attack
 				//Make shield around boss's front
-				for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
+				//Maybe add it so that based on player position you spawn it N,E,S,W
+				if (playerObj.pos.x > bowserObj.pos.x) 
 				{
-					int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, {bowserObj.pos.x + 80 * cos(rad + 0.75f * PLAY_PI), bowserObj.pos.y + 80 * sin(rad + 0.75f * PLAY_PI)}, 0, "bowser_srproj_4");
-					GameObject& shortRangeProj = Play::GetGameObject(shortRangeProjID);
-					shortRangeProj.animSpeed = 0.25f;
+					SpawnFireballs(bowserObj, 'e');
+				} 
+				else if (playerObj.pos.x < bowserObj.pos.x)
+				{
+					SpawnFireballs(bowserObj, 'w');
+				}
+				else if (playerObj.pos.y > bowserObj.pos.y)
+				{
+					SpawnFireballs(bowserObj, 'n');
+				}
+				else if (playerObj.pos.y < bowserObj.pos.y)
+				{
+					SpawnFireballs(bowserObj, 's');
 				}
 
 				gameState.bossState = BossState::bossIdle;
@@ -643,6 +647,7 @@ void UpdateBossState()
 				gameState.bossHp--;
 				gameState.roundState = RoundState::roundWin;
 
+				//Similar to player hp implementation
 				GameObject& frontHealthIconToDelObj = Play::GetGameObject(vBossHealthIcons.front());
 				frontHealthIconToDelObj.type = typeDestroyed;
 			}
@@ -650,6 +655,8 @@ void UpdateBossState()
 			{
 				//else decrement bosshp and move boss state to bossIdle 
 				gameState.bossHp--;
+
+				//Similar to player hp implementation
 				GameObject& backHealthIconToDelObj = Play::GetGameObject(vBossHealthIcons.back());
 				backHealthIconToDelObj.type = typeDestroyed;
 				gameState.bossState = BossState::bossIdle;
@@ -1724,6 +1731,49 @@ void SpawnEnemies()
 	}
 }
 
+// Used to set fireball sheild at an offset
+void SpawnFireballs(GameObject& gameObj, char dir)
+{
+
+	if (dir == 'n' || dir == 'N')
+	{
+		for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
+		{
+			int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, { gameObj.pos.x + 80 * cos(rad + 1.16f * PLAY_PI), gameObj.pos.y + 80 * sin(rad + 1.16f * PLAY_PI) }, 0, "bowser_srproj_4");
+			GameObject& shortRangeProj = Play::GetGameObject(shortRangeProjID);
+			shortRangeProj.animSpeed = 0.25f;
+		}
+	}
+	else if (dir == 'e' || dir == 'E')
+	{
+		for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
+		{
+			int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, { gameObj.pos.x + 80 * cos(rad + 1.7f * PLAY_PI), gameObj.pos.y + 80 * sin(rad + 1.7f * PLAY_PI) }, 0, "bowser_srproj_4");
+			GameObject& shortRangeProj = Play::GetGameObject(shortRangeProjID);
+			shortRangeProj.animSpeed = 0.25f;
+		}
+	}
+	else if (dir == 's' || dir == 'S')
+	{
+		for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
+		{
+			int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, { gameObj.pos.x + 80 * cos(rad + 2.2f * PLAY_PI), gameObj.pos.y + 80 * sin(rad + 2.2f * PLAY_PI) }, 0, "bowser_srproj_4");
+			GameObject& shortRangeProj = Play::GetGameObject(shortRangeProjID);
+			shortRangeProj.animSpeed = 0.25f;
+		}
+	}
+	else if (dir == 'w' || dir == 'W')
+	{
+		for (float rad{ 0.25f }; rad < 2.0f; rad += 0.25f)
+		{
+			int shortRangeProjID = Play::CreateGameObject(typeBowseSRP, { gameObj.pos.x + 80 * cos(rad + 0.75f * PLAY_PI), gameObj.pos.y + 80 * sin(rad + 0.75f * PLAY_PI) }, 0, "bowser_srproj_4");
+			GameObject& shortRangeProj = Play::GetGameObject(shortRangeProjID);
+			shortRangeProj.animSpeed = 0.25f;
+		}
+	}
+}
+
+
 //used to spawn player consumables
 void SpawnPlayerConsumables() 
 {
@@ -1973,7 +2023,15 @@ void CreateUI()
 //			GAME ENTRY RELATED:
 
 // Used to create default gameobjects that will need to be present on game entry
-void CreateDefaultGameObjects() {}
+void CreateDefaultGameObjects() 
+{
+	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight / 2 }, 0, "stage1bgn_spikes");
+	int tutScreenID = Play::CreateGameObject(typeTutScreen, { displayWidth / 2 , displayHeight / 2 }, 0, "tut_controls");
+	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35");
+	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
+	int bowserID = Play::CreateGameObject(typeBowser, { displayWidth + 75 , 500 }, 33, "bowser_walk_w_12");
+	int bowserIconID = Play::CreateGameObject(typeBowserAttackIcon, { Play::GetGameObjectByType(typeBowser).pos.x , Play::GetGameObjectByType(typeBowser).pos.y - 30 }, 33, "peachvoice_summon_8");
+}
 
 //          MISCELLANEOUS:
 
@@ -2036,9 +2094,13 @@ void ShowDebugUI()
 	std::vector<int> vExplosions = Play::CollectGameObjectIDsByType(typeBobBombExplosion);
 	
 	//		Position Checks
+	
 	Play::DrawDebugText(playerObj.pos, "Player Here", Play::cGreen);
+
 	Play::DrawDebugText(hammerObj.pos, "Hammer Here", Play::cGreen);
-	//Play::DrawDebugText(bowserObj.pos, "Bowser Here", Play::cGreen);
+
+	Play::DrawDebugText(bowserObj.pos, "Bowser Here", Play::cGreen);
+	Play::DrawCircle(bowserObj.pos, 200, Play::cGreen);
 
 	for (int goombaID : vGoombas) 
 	{
@@ -2053,6 +2115,9 @@ void ShowDebugUI()
 		std::string distanceAsString = std::to_string(distance);
 		Play::DrawDebugText(bobBombObj.pos, "BB Here", Play::cGreen);
 		Play::DrawDebugText({ bobBombObj.pos.x , bobBombObj.pos.y + 10}, distanceAsString.c_str(), Play::cGreen);
+
+		//BobBmb agro range
+		Play::DrawCircle(bobBombObj.pos, 100, Play::cGreen);
 	}
 
 	for (int bobBombID : vBobBombAlights)
@@ -2063,6 +2128,9 @@ void ShowDebugUI()
 		std::string distanceAsString = std::to_string(distance);
 		Play::DrawDebugText(bobBombObj.pos, "BB_A Here", Play::cGreen);
 		Play::DrawDebugText({ bobBombObj.pos.x , bobBombObj.pos.y + 10 }, distanceAsString.c_str(), Play::cGreen);
+
+		//BobBmb agro range
+		Play::DrawCircle(bobBombObj.pos, 100, Play::cGreen);
 	}
 
 	float playerToDryBonesAng = atan2f(playerObj.pos.y - dryBonesObj.pos.y, playerObj.pos.x - dryBonesObj.pos.x) +  PLAY_PI / 2;
