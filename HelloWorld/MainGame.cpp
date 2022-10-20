@@ -54,6 +54,7 @@ enum GameObjectType
 	typeGoldenMushroom,
 	typeRefreshingHerb,
 	typeHealth1UP,
+	typePowerUpIcon,
 	//Enemy Related Types
 	typeGoomba,
 	typeBobBombNotAlight,
@@ -69,6 +70,7 @@ enum GameObjectType
 	typeBowserHealthIcon,
 	typeBowseLRP,
 	typeBowseSRP,
+	typeEnemySpawnParticle,
 	//Miscellaneous Types
 	typeDestroyed,
 	typeSpikes,
@@ -79,8 +81,9 @@ struct GameState
 {
 	int bossHp = 4;
 	int playerHP = 3;
-	int score = 15;
+	int score = 0;
 	int timePassed = 0; 
+	int powerCounter = 0;
 	std::string playerOrientation{};
 	bool playerisDebuffed = false;
 	bool debugging = false;
@@ -110,6 +113,7 @@ void UpdateGoombas();
 void UpdateDryBones();
 void UpdateBobBombs();
 void UpdateMagiKoopa();
+void UpdateEnemySpawnParticles();
 
 //			STAGE RELATED:
 
@@ -193,6 +197,7 @@ bool MainGameUpdate( float elapsedTime )
 	UpdateBobBombs();
 	UpdateMagiKoopa();
 	UpdateDryBones();
+	UpdateEnemySpawnParticles();
 	UpdateBossProjectiles();
 	UpdateConsumables();
 	UpdateBossIcons();
@@ -350,16 +355,6 @@ void UpdatePlayerState()
 	break;
 	case PlayerState::playerPowerUp:
 	{
-		//Give player flashing yellow effect
-		if (gameState.timePassed % 2 == 0)
-		{
-			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId),Play::cYellow);
-		}
-		else 
-		{
-			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId), Play::cWhite);
-		}
-
 		//Handle player movement while in this state
 		if (gameState.playerisDebuffed) 
 		{
@@ -372,16 +367,16 @@ void UpdatePlayerState()
 
 		//if 6 seconds have passed then clear colouring
 		//rest counter and move player state to relevant state
-		if (gameState.timePassed % 7 == 0) 
+		if (gameState.timePassed % 5 == 0) 
 		{
-			Play::ColourSprite(Play::GetSpriteName(playerObj.spriteId), Play::cWhite);
-
 			if (gameState.playerisDebuffed)
 			{
+				gameState.powerCounter = 0;
 				gameState.playerState = PlayerState::playerDebuffed;
 			}
 			else
 			{
+				gameState.powerCounter = 0;
 				gameState.playerState = PlayerState::playerNotDebuffed;
 			}
 		}
@@ -638,7 +633,7 @@ void UpdateBossState()
 		//playing damage sprite
 		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
 
-		if (gameState.timePassed % 3 == 0) 
+		if (bowserObj.frame > 15) 
 		{
 			//If bosshp -- = 0 then move boss state to bossDead
 			//and decrement boss hp
@@ -1268,6 +1263,25 @@ void UpdateMagiKoopa()
 	}
 }
 
+//Used to update mob spawn particles
+void UpdateEnemySpawnParticles()
+{
+	std::vector<int> vSpawnParticles = Play::CollectGameObjectIDsByType(typeEnemySpawnParticle);
+
+	for (int enemySpawnParticleID : vSpawnParticles) 
+	{
+		GameObject& enemySpawnParticleObj = Play::GetGameObject(enemySpawnParticleID);
+
+		if (Play::IsAnimationComplete(enemySpawnParticleObj)) 
+		{
+			enemySpawnParticleObj.type = typeDestroyed;
+		}
+
+		Play::UpdateGameObject(enemySpawnParticleObj);
+		Play::DrawObject(enemySpawnParticleObj);
+	}
+}
+
 //			STAGE RELATED:
 
 //Used to update round state
@@ -1347,6 +1361,7 @@ void UpdateRoundState()
 			gameState.bossHp = 4;
 			gameState.playerHP = 3;
 			gameState.score = 0;
+			gameState.powerCounter = 0;
 			gameState.playerOrientation = "";
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
@@ -1381,6 +1396,7 @@ void UpdateRoundState()
 			gameState.bossHp = 4;
 			gameState.playerHP = 3;
 			gameState.score = 0;
+			gameState.powerCounter = 0;
 			gameState.playerOrientation = "";
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
@@ -1453,10 +1469,14 @@ void UpdateDestroyed()
 void UpdateUI() 
 {
 	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
+	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
+	GameObject& powerUpIconObj = Play::GetGameObjectByType(typePowerUpIcon);
 	std::vector<int> vPlayerHealthIcons = Play::CollectGameObjectIDsByType(typePlayerHealthIcon);
 	std::vector<int> vBossHealthIcons = Play::CollectGameObjectIDsByType(typeBowserHealthIcon);
 
-	//player health Icons
+	//Player Icons
+
+	//Player Health
 	if (gameState.roundState != RoundState::tutorialRound) 
 	{
 		for (int playerHealthIconID : vPlayerHealthIcons)
@@ -1467,10 +1487,23 @@ void UpdateUI()
 		}
 	}
 
+	//Powerup
+	powerUpIconObj.pos = { playerObj.pos.x , playerObj.pos.y - 40 };
+	if (gameState.playerState == PlayerState::playerPowerUp) 
+	{
+		Play::DrawObject(powerUpIconObj);
+	}
+	Play::UpdateGameObject(powerUpIconObj);
+
 	//Text
 
 	//Score and Health
-	if (gameState.roundState == RoundState::normalRound || gameState.roundState == RoundState::bossRound) 
+	if (gameState.roundState == RoundState::normalRound ) 
+	{
+		Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), { displayWidth / 2 , 25 }, Play::CENTRE);
+		Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth / 2 , displayHeight - 25 }, Play::CENTRE);
+	}
+	else if (gameState.roundState == RoundState::bossRound) 
 	{
 		Play::DrawFontText("SuperMario25636px_10x10", "SCORE " + std::to_string(gameState.score), { displayWidth / 2 , 25 }, Play::CENTRE);
 		Play::DrawFontText("SuperMario25636px_10x10", "HEALTH", { displayWidth / 2 , displayHeight - 25 }, Play::CENTRE);
@@ -1690,34 +1723,49 @@ void SpawnEnemies()
 
 	if (gameState.roundState == RoundState::normalRound) 
 	{
-		//Spawn/Create 2 goomba gameobjects
+		//Create enemyspawnparticle
+		// spawn goomba on enemyspawnparticle pos
 		for (int i = 0; i < 2; i++)
 		{
-			int goombaID = Play::CreateGameObject(typeGoomba, GetRandomPositionInPS(), 10, "goomba_walk_e_8");
+			int spawnParticleID = Play::CreateGameObject(typeEnemySpawnParticle, GetRandomPositionInPS(), 0, "spawn_particle_13");
+			GameObject& spawnParticleObj = Play::GetGameObject(spawnParticleID);
+			spawnParticleObj.animSpeed = 0.55f;
+			int goombaID = Play::CreateGameObject(typeGoomba, spawnParticleObj.pos, 10, "goomba_walk_e_8");
 			GameObject& goombaObj = Play::GetGameObject(goombaID);
 			SetVelocity(goombaObj, "x");
 		}
 
-		//Spawn/Create 2 bobBomb gameobjects
+		//Create enemyspawnparticle
+		// spawn bobbomb on enemyspawnparticle pos
 		for (int i = 0; i < 2; i++)
 		{
-			int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, GetRandomPositionInPS(), 10, "bobbomb_walk_e_8");
+			int spawnParticleID = Play::CreateGameObject(typeEnemySpawnParticle, GetRandomPositionInPS(), 0, "spawn_particle_13");
+			GameObject& spawnParticleObj = Play::GetGameObject(spawnParticleID);
+			spawnParticleObj.animSpeed = 0.55f;
+			int bobbombID = Play::CreateGameObject(typeBobBombNotAlight, spawnParticleObj.pos, 10, "bobbomb_walk_e_8");
 			GameObject& bobBombObj = Play::GetGameObject(bobbombID);
 			SetVelocity(bobBombObj, "x");
 		}
 
-		//Spawn/Create 1 drybones or magikoopa enemy based on the chance variable
+		//Create enemyspawnparticle
+		//Spawn/Create 1 drybones or magikoopa enemy on enemy spawn particle based on the chance variable
 		int chance = PickBetween(1, -1);
 
 		if (chance == 1)
 		{
-			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, GetRandomPositionInPS(), 15, "magikoopa_s_8");
+			int spawnParticleMKID = Play::CreateGameObject(typeEnemySpawnParticle, GetRandomPositionInPS(), 0, "spawn_particle_13");
+			GameObject& spawnParticleMKObj = Play::GetGameObject(spawnParticleMKID);
+			spawnParticleMKObj.animSpeed = 0.55f;
+			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, spawnParticleMKObj.pos, 15, "magikoopa_s_8");
 			GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
 			SetVelocity(magiKoopaObj, "y");
 		}
 		else
 		{
-			int dryBonesID = Play::CreateGameObject(typeDryBones, GetRandomPositionInPS(), 15, "drybones_s_16");
+			int spawnParticleDBID = Play::CreateGameObject(typeEnemySpawnParticle, GetRandomPositionInPS(), 0, "spawn_particle_13");
+			GameObject& spawnParticleDBObj = Play::GetGameObject(spawnParticleDBID);
+			spawnParticleDBObj.animSpeed = 0.55f;
+			int dryBonesID = Play::CreateGameObject(typeDryBones, spawnParticleDBObj.pos, 15, "drybones_s_16");
 			GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
 			SetVelocity(dryBonesObj, "both");
 		}
@@ -1725,7 +1773,10 @@ void SpawnEnemies()
 
 	else if (gameState.roundState == RoundState::bossRound) 
 	{
-		int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, { 40 , Play::RandomRollRange(395, 605) }, 15, "magikoopa_s_8");
+		int spawnParticleMK2ID = Play::CreateGameObject(typeEnemySpawnParticle, { 40 , Play::RandomRollRange(395, 605) }, 0, "spawn_particle_13");
+		GameObject& spawnParticleMK2Obj = Play::GetGameObject(spawnParticleMK2ID);
+		spawnParticleMK2Obj.animSpeed = 0.55f;
+		int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, spawnParticleMK2Obj.pos, 15, "magikoopa_s_8");
 		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
 		SetVelocity(magiKoopaObj, "y");
 	}
@@ -2025,12 +2076,15 @@ void CreateUI()
 // Used to create default gameobjects that will need to be present on game entry
 void CreateDefaultGameObjects() 
 {
-	int spikeID = Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight / 2 }, 0, "stage1bgn_spikes");
-	int tutScreenID = Play::CreateGameObject(typeTutScreen, { displayWidth / 2 , displayHeight / 2 }, 0, "tut_controls");
+	Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight / 2 }, 0, "stage1bgn_spikes");
+	Play::CreateGameObject(typeTutScreen, { displayWidth / 2 , displayHeight / 2 }, 0, "tut_controls");
 	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35");
-	int hammerID = Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
-	int bowserID = Play::CreateGameObject(typeBowser, { displayWidth + 75 , 500 }, 33, "bowser_walk_w_12");
-	int bowserIconID = Play::CreateGameObject(typeBowserAttackIcon, { Play::GetGameObjectByType(typeBowser).pos.x , Play::GetGameObjectByType(typeBowser).pos.y - 30 }, 33, "peachvoice_summon_8");
+	int powerUpID = Play::CreateGameObject(typePowerUpIcon, { Play::GetGameObjectByType(typePlayer).pos.x , Play::GetGameObjectByType(typePlayer).pos.y - 40 }, 0, "mario_shield");
+	GameObject& powerupIconObj = Play::GetGameObject(powerUpID);
+	powerupIconObj.scale = 0.5;
+	Play::CreateGameObject(typeHammer, Play::GetGameObjectByType(typePlayer).pos, 33, "ham_mario_s_3");
+	Play::CreateGameObject(typeBowser, { displayWidth + 75 , 500 }, 33, "bowser_walk_w_12");
+	Play::CreateGameObject(typeBowserAttackIcon, { Play::GetGameObjectByType(typeBowser).pos.x , Play::GetGameObjectByType(typeBowser).pos.y - 30 }, 33, "peachvoice_summon_8");
 }
 
 //          MISCELLANEOUS:
