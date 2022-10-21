@@ -1125,7 +1125,7 @@ void UpdateBobBombs()
 		{
 			if (Play::IsColliding(explosionObj, playerObj)) 
 			{
-				gameState.playerState == PlayerState::playerDamaged;
+				gameState.playerState = PlayerState::playerDamaged;
 				explosionObj.type = typeDestroyed;
 			}
 		}
