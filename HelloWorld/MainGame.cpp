@@ -71,6 +71,7 @@ enum GameObjectType
 	typeBowseLRP,
 	typeBowseSRP,
 	typeEnemySpawnParticle,
+	typeEnemyDeathParticle,
 	//Miscellaneous Types
 	typeDestroyed,
 	typeSpikes,
@@ -83,7 +84,6 @@ struct GameState
 	int playerHP = 3;
 	int score = 0;
 	int timePassed = 0; 
-	int powerCounter = 0;
 	std::string playerOrientation{};
 	bool playerisDebuffed = false;
 	bool debugging = false;
@@ -113,7 +113,7 @@ void UpdateGoombas();
 void UpdateDryBones();
 void UpdateBobBombs();
 void UpdateMagiKoopa();
-void UpdateEnemySpawnParticles();
+void UpdateEnemyParticles();
 
 //			STAGE RELATED:
 
@@ -181,7 +181,7 @@ void MainGameEntry( PLAY_IGNORE_COMMAND_LINE )
 	Play::CentreAllSpriteOrigins();
 	Play::LoadBackground("Data\\Backgrounds\\stage1bgn.png");
 	CreateDefaultGameObjects();
-	//start audio loop
+	Play::StartAudioLoop("tutorial");
 	CreateUI();
 }
 
@@ -197,7 +197,7 @@ bool MainGameUpdate( float elapsedTime )
 	UpdateBobBombs();
 	UpdateMagiKoopa();
 	UpdateDryBones();
-	UpdateEnemySpawnParticles();
+	UpdateEnemyParticles();
 	UpdateBossProjectiles();
 	UpdateConsumables();
 	UpdateBossIcons();
@@ -371,12 +371,10 @@ void UpdatePlayerState()
 		{
 			if (gameState.playerisDebuffed)
 			{
-				gameState.powerCounter = 0;
 				gameState.playerState = PlayerState::playerDebuffed;
 			}
 			else
 			{
-				gameState.powerCounter = 0;
 				gameState.playerState = PlayerState::playerNotDebuffed;
 			}
 		}
@@ -612,15 +610,6 @@ void UpdateBossState()
 				{
 					SpawnFireballs(bowserObj, 'w');
 				}
-				else if (playerObj.pos.y > bowserObj.pos.y)
-				{
-					SpawnFireballs(bowserObj, 'n');
-				}
-				else if (playerObj.pos.y < bowserObj.pos.y)
-				{
-					SpawnFireballs(bowserObj, 's');
-				}
-
 				gameState.bossState = BossState::bossIdle;
 			}
 		}
@@ -632,6 +621,12 @@ void UpdateBossState()
 		std::vector<int> vBossHealthIcons = Play::CollectGameObjectIDsByType(typeBowserHealthIcon);
 		//playing damage sprite
 		Play::SetSprite(bowserObj, "bowser_dead_15", 0.25f);
+		
+
+		if (bowserObj.frame == 5) 
+		{
+			Play::PlayAudio("bowser_damage");
+		}
 
 		if (bowserObj.frame > 15) 
 		{
@@ -764,7 +759,6 @@ void UpdateBossProjectiles()
 		{
 			bossProjObj.type = typeDestroyed;
 		}
-
 		Play::UpdateGameObject(bossProjObj);
 		Play::DrawObject(bossProjObj);
 	}
@@ -798,6 +792,11 @@ void UpdateGoombas()
 			//Set hammer collision to true so we can destroy object
 			if (Play::IsColliding(goombaObj,hammerObj)) 
 			{
+				int deathParticleID = Play::CreateGameObject(typeEnemyDeathParticle, goombaObj.pos, 0 , "death_particle_13");
+				GameObject& deathParticleObj = Play::GetGameObject(deathParticleID);
+				deathParticleObj.scale = 0.7;
+				deathParticleObj.animSpeed = 0.55f;
+				Play::PlayAudio("coin");
 				hammerCollided = true;
 				gameState.score++;
 			}
@@ -930,6 +929,11 @@ void UpdateDryBones()
 		//if drybones head has collided with hammer set hammerhascollided to true so we can destroy it
 		if (gameState.playerState == PlayerState::playerAttack && Play::IsColliding(dryBoneHeadObj, hammerObj))
 		{
+			int deathParticleID = Play::CreateGameObject(typeEnemyDeathParticle, dryBoneHeadObj.pos, 0, "death_particle_13");
+			GameObject& deathParticleObj = Play::GetGameObject(deathParticleID);
+			deathParticleObj.scale = 0.7;
+			deathParticleObj.animSpeed = 0.55f;
+			Play::PlayAudio("coin");
 			hammerHasCollided = true;
 			gameState.score + 3;
 		}
@@ -952,9 +956,18 @@ void UpdateDryBones()
 		{
 			dryBoneHeadObj.type = typeDestroyed;
 			gameState.score += 3;
+			int deathParticleID = Play::CreateGameObject(typeEnemyDeathParticle, dryBoneHeadObj.pos, 0, "death_particle_13");
+			GameObject& deathParticleObj = Play::GetGameObject(deathParticleID);
+			deathParticleObj.scale = 0.7;
+			deathParticleObj.animSpeed = 0.55f;
+			Play::PlayAudio("coin");
 
 			for (int dryBoneBodyID : vdryBonesBodies)
 			{
+				int deathParticleID = Play::CreateGameObject(typeEnemyDeathParticle, dryBoneHeadObj.pos, 0, "death_particle_13");
+				GameObject& deathParticleObj = Play::GetGameObject(deathParticleID);
+				deathParticleObj.scale = 0.7;
+				deathParticleObj.animSpeed = 0.55f;
 				GameObject& dryBoneBodyObj = Play::GetGameObject(dryBoneBodyID);
 				dryBoneBodyObj.type = typeDestroyed;
 			}
@@ -1080,6 +1093,11 @@ void UpdateBobBombs()
 
 		if (isHammerColliding)
 		{
+			int deathParticleID = Play::CreateGameObject(typeEnemyDeathParticle, bobBombObj.pos, 0, "death_particle_13");
+			GameObject& deathParticleObj = Play::GetGameObject(deathParticleID);
+			deathParticleObj.scale = 0.7;
+			deathParticleObj.animSpeed = 0.55f;
+			Play::PlayAudio("coin");
 			gameState.score += 2;
 			bobBombObj.type = typeDestroyed;
 		}
@@ -1154,7 +1172,7 @@ void UpdateMagiKoopa()
 		}
 
 		//if angle between player is between positive 5 degrees and negative 5 degrees and there is only 1 projectile on screen
-		if (playerObj.pos.x < magiKoopaObj.pos.x && IsInBetween(0.087f ,-0.087f,playerToMagiAng) && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
+		if (playerObj.pos.x < magiKoopaObj.pos.x && IsInBetween(0.087f ,-0.087f,playerToMagiAng) /*&& playerObj.pos.x < magiKoopaObj.pos.x*/ && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
 		{
 			magiKoopaObj.velocity = {0,0};
 			Play::SetSprite(magiKoopaObj, "magikoopabattle_w_12", 0.25f);
@@ -1182,8 +1200,8 @@ void UpdateMagiKoopa()
 				}
 			} 
 		}
-		//if angle between player is between positive 175 degrees and negative 1755 degrees and there is only 1 projectile on screen
-		else if (playerObj.pos.x > magiKoopaObj.pos.x && IsInBetween(3.054f, -3.054f, playerToMagiAng) && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
+		//if angle between player is between positive 175 degrees and negative 175 degrees and there is only 1 projectile on screen
+		else if (playerObj.pos.x > magiKoopaObj.pos.x && IsInBetween(3.054f, -3.054f, playerToMagiAng) /*&& playerObj.pos.x > magiKoopaObj.pos.x*/ && Play::CollectGameObjectIDsByType(typeMagiKoopaProj).size() < 1)
 		{
 			magiKoopaObj.velocity = { 0,0 };
 			Play::SetSprite(magiKoopaObj, "magikoopabattle_e_12", 0.25f);
@@ -1220,6 +1238,11 @@ void UpdateMagiKoopa()
 
 		if (isHammerColliding) 
 		{
+			int deathParticleID = Play::CreateGameObject(typeEnemyDeathParticle, magiKoopaObj.pos, 0, "death_particle_13");
+			GameObject& deathParticleObj = Play::GetGameObject(deathParticleID);
+			deathParticleObj.scale = 0.7;
+			deathParticleObj.animSpeed = 0.55f;
+			Play::PlayAudio("coin");
 			gameState.score += 3;
 			magiKoopaObj.type = typeDestroyed;
 		}
@@ -1264,9 +1287,10 @@ void UpdateMagiKoopa()
 }
 
 //Used to update mob spawn particles
-void UpdateEnemySpawnParticles()
+void UpdateEnemyParticles()
 {
 	std::vector<int> vSpawnParticles = Play::CollectGameObjectIDsByType(typeEnemySpawnParticle);
+	std::vector<int> vDeathParticles = Play::CollectGameObjectIDsByType(typeEnemyDeathParticle);
 
 	for (int enemySpawnParticleID : vSpawnParticles) 
 	{
@@ -1280,6 +1304,20 @@ void UpdateEnemySpawnParticles()
 		Play::UpdateGameObject(enemySpawnParticleObj);
 		Play::DrawObject(enemySpawnParticleObj);
 	}
+
+	for (int enemyDeathParticleID : vDeathParticles)
+	{
+		GameObject& enemyDeathParticleObj = Play::GetGameObject(enemyDeathParticleID);
+
+		if (Play::IsAnimationComplete(enemyDeathParticleObj))
+		{
+			enemyDeathParticleObj.type = typeDestroyed;
+		}
+
+		Play::UpdateGameObject(enemyDeathParticleObj);
+		Play::DrawObject(enemyDeathParticleObj);
+	}
+
 }
 
 //			STAGE RELATED:
@@ -1298,6 +1336,8 @@ void UpdateRoundState()
 
 		if (Play::KeyDown(VK_RETURN)) 
 		{
+			Play::StopAudioLoop("tutorial");
+			Play::StartAudioLoop("normal1");
 			gameState.playerState = PlayerState::playerAppear;
 			gameState.roundState = RoundState::normalRound;
 		}
@@ -1323,11 +1363,13 @@ void UpdateRoundState()
 			SpawnPlayerConsumables();
 		}
 
-		//if score is more than 14 or 45 seconds have passed then move to bossround and make boss appear
-		if (gameState.score > 14 || (gameState.timePassed % 45 == 0 && gameState.timePassed != 0))
+		//if score is more than 9
+		if (gameState.score > 9)
 		{
 			gameState.bossState = BossState::bossAppear;
 			gameState.roundState = RoundState::bossRound;
+			Play::StopAudioLoop("normal1");
+			Play::StartAudioLoop("boss1");
 			//stop normal round audio and start boss round audio
 		}
 	}
@@ -1340,7 +1382,7 @@ void UpdateRoundState()
 	break;
 	case RoundState::roundLose:
 	{
-
+		Play::StopAudioLoop("boss1");
 		ClearEnemiesAndItems();
 		ClearHealthIcons();
 
@@ -1361,14 +1403,14 @@ void UpdateRoundState()
 			gameState.bossHp = 4;
 			gameState.playerHP = 3;
 			gameState.score = 0;
-			gameState.powerCounter = 0;
 			gameState.playerOrientation = "";
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
 			gameState.isBossAtkLngRng = false;
 			CreateUI();
+
 			//stop lose audio loop
-			//start audio loop
+			Play::StartAudioLoop("tutorial");
 
 			//Delete all enemies and move boss to off screen
 			playerObj.pos = { -50 ,500 };
@@ -1382,6 +1424,7 @@ void UpdateRoundState()
 	break;
 	case RoundState::roundWin:
 	{
+		Play::StopAudioLoop("boss1");
 		ClearEnemiesAndItems();
 		ClearHealthIcons();
 		UpdatePlayerState();
@@ -1396,7 +1439,6 @@ void UpdateRoundState()
 			gameState.bossHp = 4;
 			gameState.playerHP = 3;
 			gameState.score = 0;
-			gameState.powerCounter = 0;
 			gameState.playerOrientation = "";
 			gameState.playerisDebuffed = false;
 			gameState.debugging = false;
@@ -1404,7 +1446,7 @@ void UpdateRoundState()
 			CreateUI();
 
 			//stop win audio loop
-			//start audio loop
+			Play::StartAudioLoop("tutorial");
 
 			//Delete all enemies and move boss to off screen
 			playerObj.pos = { -50 ,500 };
@@ -1669,13 +1711,15 @@ void HandleHammerAnimations()
 {
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
-
+	
+	Play::PlayAudio("hammer");
 	//Based on value of playerOrientation play right hammer and player attack animation
 	//once animation is finished them move to notdebuffed state
 	if (gameState.playerOrientation == vOrientations.at(0))
 	{
 		Play::SetSprite(playerObj, "mario_hammer_n_3", 0.15f);
 		Play::SetSprite(hammerObj, "ham_mario_n_3", 0.10f);
+		
 
 		if (Play::IsAnimationComplete(hammerObj) && Play::IsAnimationComplete(playerObj))
 		{
@@ -1830,16 +1874,17 @@ void SpawnPlayerConsumables()
 {
 	if (gameState.roundState == RoundState::normalRound) 
 	{
-		//if player health is not 0 and there isnt a golden mushroom on screen then spawn a golden mushroom
-		if (gameState.playerHP != 0 && Play::CollectGameObjectIDsByType(typeGoldenMushroom).size() < 1)
+		//if there are more than 5 enemies on screen and there isnt a golden mushroom on screen then spawn a golden mushroom
+		//maybe instead of when plkayer is alive we spawn golden mushroom when theres a lot of enemies on screen
+		if (Play::CollectGameObjectIDsByType(typeGoomba).size() + Play::CollectGameObjectIDsByType(typeBobBombNotAlight).size() + Play::CollectGameObjectIDsByType(typeBobBombAlight).size() + Play::CollectGameObjectIDsByType(typeDryBones).size() + Play::CollectGameObjectIDsByType(typeMagiKoopa).size() > 5 && Play::CollectGameObjectIDsByType(typeGoldenMushroom).size() < 1)
 		{
 			int goldenMushroomID = Play::CreateGameObject(typeGoldenMushroom, GetRandomPositionInPS(), 20, "invincible_powerup");
 			GameObject& goldenMushroomObj = Play::GetGameObject(goldenMushroomID);
 			SetVelocity(goldenMushroomObj, "both");
 		}
 
-		//if player health is less than 2 and there isnt a health pickups on screen then spawn a healthup
-		else if (gameState.playerHP < 2 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 1)
+		//if player health is less than 3 and there isnt a health pickups on screen then spawn a healthup
+		else if (gameState.playerHP < 3 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 1)
 		{
 			int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(), 20, "health_up");
 			GameObject& healthUpObj = Play::GetGameObject(healthUpID);
@@ -1862,6 +1907,12 @@ void SpawnPlayerConsumables()
 			GameObject& refreshingHerbObj = Play::GetGameObject(refreshingHerbID);
 			SetVelocity(refreshingHerbObj, "both");
 		}
+		 else if (gameState.playerHP < 3 && Play::CollectGameObjectIDsByType(typeHealth1UP).size() < 1)
+		 {
+			 int healthUpID = Play::CreateGameObject(typeHealth1UP, GetRandomPositionInPS(), 20, "health_up");
+			 GameObject& healthUpObj = Play::GetGameObject(healthUpID);
+			 SetVelocity(healthUpObj, "both");
+		 }
 	}
 }
 
@@ -2069,6 +2120,9 @@ void CreateUI()
 	GameObject& bossHealthIcon4Obj = Play::GetGameObject(bossHealthIcon4ID);
 
 	bossHealthIcon1Obj.scale = bossHealthIcon2Obj.scale = bossHealthIcon3Obj.scale = bossHealthIcon4Obj.scale = 0.8;
+	
+	//Setting death particle to green
+	Play::ColourSprite("death_particle_13", Play::cGreen);
 }
 
 //			GAME ENTRY RELATED:
@@ -2139,13 +2193,14 @@ void ShowDebugUI()
 	GameObject& playerObj = Play::GetGameObjectByType(typePlayer);
 	GameObject& hammerObj = Play::GetGameObjectByType(typeHammer);
 	GameObject& bowserObj = Play::GetGameObjectByType(typeBowser);
-	GameObject& dryBonesObj = Play::GetGameObjectByType(typeDryBones);
 	GameObject& magiKoopaObj = Play::GetGameObjectByType(typeMagiKoopa);
 
 	std::vector<int> vGoombas = Play::CollectGameObjectIDsByType(typeGoomba);
 	std::vector<int> vBobBombAlights = Play::CollectGameObjectIDsByType(typeBobBombAlight);
 	std::vector<int> vBobBombs = Play::CollectGameObjectIDsByType(typeBobBombNotAlight);
 	std::vector<int> vExplosions = Play::CollectGameObjectIDsByType(typeBobBombExplosion);
+	std::vector<int> vDryBones = Play::CollectGameObjectIDsByType(typeDryBones);
+	std::vector<int> vMagiKoopas = Play::CollectGameObjectIDsByType(typeMagiKoopa);
 	
 	//		Position Checks
 	
@@ -2187,19 +2242,27 @@ void ShowDebugUI()
 		Play::DrawCircle(bobBombObj.pos, 100, Play::cGreen);
 	}
 
-	float playerToDryBonesAng = atan2f(playerObj.pos.y - dryBonesObj.pos.y, playerObj.pos.x - dryBonesObj.pos.x) +  PLAY_PI / 2;
-	std::string playerToDryBonesAngString = std::to_string(playerToDryBonesAng);
-	float dryBonesDistance = FindDistance(dryBonesObj, playerObj);
-	std::string dryBonesDistanceString = std::to_string(dryBonesDistance);
-	Play::DrawDebugText({ dryBonesObj.pos.x, dryBonesObj.pos.y + 20 }, dryBonesDistanceString.c_str(), Play::cGreen);
-	Play::DrawDebugText({ dryBonesObj.pos.x, dryBonesObj.pos.y + 10 }, playerToDryBonesAngString.c_str(), Play::cGreen);
-	Play::DrawDebugText(dryBonesObj.pos, "DD Here", Play::cGreen);
+	for (int dryBonesID :vDryBones) 
+	{
+		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+		float playerToDryBonesAng = atan2f(playerObj.pos.y - dryBonesObj.pos.y, playerObj.pos.x - dryBonesObj.pos.x) + PLAY_PI / 2;
+		std::string playerToDryBonesAngString = std::to_string(playerToDryBonesAng);
+		float dryBonesDistance = FindDistance(dryBonesObj, playerObj);
+		std::string dryBonesDistanceString = std::to_string(dryBonesDistance);
+		Play::DrawDebugText({ dryBonesObj.pos.x, dryBonesObj.pos.y + 20 }, dryBonesDistanceString.c_str(), Play::cGreen);
+		Play::DrawDebugText({ dryBonesObj.pos.x, dryBonesObj.pos.y + 10 }, playerToDryBonesAngString.c_str(), Play::cGreen);
+		Play::DrawDebugText(dryBonesObj.pos, "DD Here", Play::cGreen);
+	}
 
-	float playerToMagiAng = atan2f( magiKoopaObj.pos.y - playerObj.pos.y, magiKoopaObj.pos.x - playerObj.pos.x);
-	std::string playerToMagiKoopaAngString = std::to_string(playerToMagiAng);
-	Play::DrawDebugText({ magiKoopaObj.pos.x, magiKoopaObj.pos.y + 10 }, playerToMagiKoopaAngString.c_str(), Play::cGreen);
-	Play::DrawDebugText(magiKoopaObj.pos, "MK Here", Play::cGreen);
-	
+	for (int magiKooapID : vMagiKoopas)
+	{
+		GameObject& magiKoopaObj = Play::GetGameObject(magiKooapID);
+		float playerToMagiAng = atan2f(magiKoopaObj.pos.y - playerObj.pos.y, magiKoopaObj.pos.x - playerObj.pos.x);
+		std::string playerToMagiKoopaAngString = std::to_string(playerToMagiAng);
+		Play::DrawDebugText({ magiKoopaObj.pos.x, magiKoopaObj.pos.y + 10 }, playerToMagiKoopaAngString.c_str(), Play::cGreen);
+		Play::DrawDebugText(magiKoopaObj.pos, "MK Here", Play::cGreen);
+	}
+
 	//		Collision Checks
 
 	for (int goombaID : vGoombas)
@@ -2242,16 +2305,24 @@ void ShowDebugUI()
 		}
 	}
 
-	if (Play::IsColliding(dryBonesObj, playerObj))
+	for (int dryBonesID : vDryBones)
 	{
-		Play::DrawDebugText(dryBonesObj.pos, "DD Colliding", Play::cGreen);
+		GameObject& dryBonesObj = Play::GetGameObject(dryBonesID);
+		if (Play::IsColliding(dryBonesObj, playerObj))
+		{
+			Play::DrawDebugText(dryBonesObj.pos, "DD Colliding", Play::cGreen);
+		}
 	}
-	
-	if (Play::IsColliding(magiKoopaObj, playerObj))
+
+	for (int magiKooapID : vMagiKoopas)
 	{
-		Play::DrawDebugText(magiKoopaObj.pos, "MK Colliding", Play::cGreen);
+		GameObject& magiKoopaObj = Play::GetGameObject(magiKooapID);
+		if (Play::IsColliding(magiKoopaObj, playerObj))
+		{
+			Play::DrawDebugText(magiKoopaObj.pos, "MK Colliding", Play::cGreen);
+		}
 	}
-	
+
 	//Timer Stuff
 	
 	//seconds
