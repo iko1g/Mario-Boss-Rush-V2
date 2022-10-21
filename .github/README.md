@@ -64,4 +64,6 @@
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ![](/.github/images/screenshots.png)
 
-<p align="center"> </p>
+<p align="center"> <img src="/.github/images/sc1.gif"> </p>
+
+<p align="center"> <img src="/.github/images/sc2.gif"> </p>
