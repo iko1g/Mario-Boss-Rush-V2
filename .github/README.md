@@ -1,7 +1,7 @@
 
 ![](/.github/images/mario_title.png)
 ## Description
-* A Consumo inspired mario themed mini game where you fight against bowsers minions and eventually when bowser himself, using the Framebuffer framework.
+* A Consumo inspired mario themed mini game where you fight against bowsers minions and eventually Bowser when he decides to show up, using the Playbuffer framework.
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 <p align="center"> <img src="/.github/images/mario_idle.gif"> </p>
 
