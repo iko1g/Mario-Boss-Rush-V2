@@ -549,7 +549,7 @@ void UpdateBossState()
 		if (gameState.timePassed % 4 == 0) 
 		{
 			//if list of enemies is empty move to spawn mob state
-			if (Play::CollectGameObjectIDsByType(typeMagiKoopa).size() == 0)
+			if (Play::CollectGameObjectIDsByType(typeMagiKoopa).size() + Play::CollectGameObjectIDsByType(typeGoomba).size() == 0)
 			{
 				gameState.bossState = BossState::bossSummonMob;
 			}
@@ -573,8 +573,6 @@ void UpdateBossState()
 	{
 		//Play attack animation
 		Play::SetSprite(bowserObj, "bowser_attack_14", 0.25f);
-
-		Play::DrawDebugText({ displayWidth / 2 , displayHeight / 2 }, "Agro", Play::cGreen);
 
 		if (bowserObj.frame == 13) 
 		{
@@ -1817,12 +1815,27 @@ void SpawnEnemies()
 
 	else if (gameState.roundState == RoundState::bossRound) 
 	{
-		int spawnParticleMK2ID = Play::CreateGameObject(typeEnemySpawnParticle, { 40 , Play::RandomRollRange(395, 605) }, 0, "spawn_particle_13");
-		GameObject& spawnParticleMK2Obj = Play::GetGameObject(spawnParticleMK2ID);
-		spawnParticleMK2Obj.animSpeed = 0.55f;
-		int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, spawnParticleMK2Obj.pos, 15, "magikoopa_s_8");
-		GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
-		SetVelocity(magiKoopaObj, "y");
+
+		int bossSummonChance = PickBetween(1, -1);
+
+		if (bossSummonChance == 1) 
+		{
+			int spawnParticleMK2ID = Play::CreateGameObject(typeEnemySpawnParticle, { 40 , Play::RandomRollRange(395, 605) }, 0, "spawn_particle_13");
+			GameObject& spawnParticleMK2Obj = Play::GetGameObject(spawnParticleMK2ID);
+			spawnParticleMK2Obj.animSpeed = 0.55f;
+			int magiKoopaID = Play::CreateGameObject(typeMagiKoopa, spawnParticleMK2Obj.pos, 15, "magikoopa_s_8");
+			GameObject& magiKoopaObj = Play::GetGameObject(magiKoopaID);
+			SetVelocity(magiKoopaObj, "y");
+		}
+		else if (bossSummonChance == -1) 
+		{
+			int spawnParticleID = Play::CreateGameObject(typeEnemySpawnParticle, GetRandomPositionInPS(), 0, "spawn_particle_13");
+			GameObject& spawnParticleObj = Play::GetGameObject(spawnParticleID);
+			spawnParticleObj.animSpeed = 0.55f;
+			int goombaID = Play::CreateGameObject(typeGoomba, spawnParticleObj.pos, 10, "goomba_walk_e_8");
+			GameObject& goombaObj = Play::GetGameObject(goombaID);
+			SetVelocity(goombaObj, "x");
+		}
 	}
 }
 
