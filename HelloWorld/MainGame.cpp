@@ -2131,7 +2131,7 @@ void CreateUI()
 void CreateDefaultGameObjects() 
 {
 	Play::CreateGameObject(typeSpikes, { displayWidth / 2 , displayHeight / 2 }, 0, "stage1bgn_spikes");
-	Play::CreateGameObject(typeTutScreen, { displayWidth / 2 , displayHeight / 2 }, 0, "tut_controls");
+	Play::CreateGameObject(typeTutScreen, { displayWidth / 2 , displayHeight / 2 }, 0, "tut_controls1");
 	Play::CreateGameObject(typePlayer, { -50 , 500 }, 15, "mario_idle_s_35");
 	int powerUpID = Play::CreateGameObject(typePowerUpIcon, { Play::GetGameObjectByType(typePlayer).pos.x , Play::GetGameObjectByType(typePlayer).pos.y - 40 }, 0, "mario_shield");
 	GameObject& powerupIconObj = Play::GetGameObject(powerUpID);
