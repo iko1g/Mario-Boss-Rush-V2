@@ -573,7 +573,7 @@ void UpdateBossState()
 	{
 		//Play attack animation
 		Play::SetSprite(bowserObj, "bowser_attack_14", 0.25f);
-
+ 
 		if (bowserObj.frame == 13) 
 		{
 			if (gameState.isBossAtkLngRng)
