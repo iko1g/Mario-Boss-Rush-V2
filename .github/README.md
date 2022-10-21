@@ -23,6 +23,18 @@
 <p align="center"> Press the Space bar to Attack </p>
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+![](/.github/images/consumables.png)
+
+<p align="center"> <img src="/HelloWorld/Data/Sprites/invincible_powerup.png"> </p>
+<p align="center"> Pick these up and you'll be invunerable for a short period of time </p>
+
+<p align="center"> <img src="/HelloWorld/Data/Sprites/health_up.png"> </p>
+<p align="center"> Pick these up and you'll gain one point of health </p>
+
+<p align="center"> <img src="/HelloWorld/Data/Sprites/refreshing_herb.png"> </p>
+<p align="center"> Pick these up and you'll no longer be debuffed </p>
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 <p align="center"> <img src="/.github/images/mario_dead.gif"> </p>
 
@@ -32,6 +44,11 @@
 ![](/.github/images/bosses.png)
 
 <p align="center"> <img src="/.github/images/bowser_win.gif"> </p>
+<p align="center"> </p>
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+![](/.github/images/screenshots.png)
+
 <p align="center"> </p>
 
 ## A Learning Scaffold
