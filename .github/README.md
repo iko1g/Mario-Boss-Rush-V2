@@ -59,7 +59,7 @@
 ![](/.github/images/bosses.png)
 
 <p align="center"> <img src="/.github/images/bowser_win.gif"> </p>
-<p align="center"> Our sole boss is bowser with 3 types of attack. One where he will summon a mob from the previous round to come and fit by him. Another where he causes metoers to fall from the sky and the last being a short range flame shield if mario gets too close.</p>
+<p align="center"> Our sole boss is bowser with 3 types of attack. One where he will summon a mob from the previous round to come and fight by him. Another where he causes metoers to fall from the sky and the last being a short range flame shield if mario gets too close.</p>
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ![](/.github/images/screenshots.png)
